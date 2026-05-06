@@ -1,4 +1,8 @@
 {
     "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-    "python-envs.workspaceSearchPaths": ["./.venv"]
+    "python-envs.workspaceSearchPaths": ["./.venv"],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true
+    }
 }

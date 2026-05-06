@@ -1,5 +1,4 @@
-from db import SessionLocal
-from models.sql.user_lock_configuration import UserLockConfiguration
+from models.documents.user_lock_configuration import UserLockConfiguration
 from utils.chaster_api import create_custom_log
 
 
@@ -9,24 +8,19 @@ async def link_with_token(link_token: str, username: str) -> bool:
     Returns True if the link was successful, False otherwise.
     """
     try:
-        db = SessionLocal()
-        lock_config = (
-            db.query(UserLockConfiguration)
-            .filter_by(link_token=link_token)
-            .first()
+        lock_config = await UserLockConfiguration.find_one(
+            UserLockConfiguration.link_token == link_token
         )
 
         if lock_config is None:
             print(f"[Link] No UserLockConfiguration found for token {link_token!r}")
-            db.close()
             return False
 
         lock_config.is_linked = True
         lock_config.puryfi_username = username
-        db.commit()
+        await lock_config.save()
 
         session_id = lock_config.session_id
-        db.close()
 
         print(f"[Link] Session {lock_config.id!r} is now linked ✓")
 

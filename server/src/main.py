@@ -6,13 +6,14 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db import init_db
+from db import init_db, close_db
 from routes import websocket, webhooks, extensions
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    await init_db()
     yield
+    await close_db()
 
 app = FastAPI(lifespan=lifespan)
 

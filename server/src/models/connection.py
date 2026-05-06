@@ -112,7 +112,7 @@ class Connection:
             self.is_linked = True
             self.link_token = link_token
             
-            queued_messages = fetch_and_delete_queued_messages(link_token)
+            queued_messages = await fetch_and_delete_queued_messages(link_token)
             
             async def process_queue_msg(msg_type, payload):
                 res = await self.send_message(msg_type, payload)
@@ -124,13 +124,14 @@ class Connection:
                     if error_name == "missingPluginIntents":
                         print("[Queue] Requeuing message due to missing intents")
                         from services.queue import queue_message
-                        queue_message(self.link_token, msg_type, payload)
+                        await queue_message(self.link_token, msg_type, payload)
                         # Optionally request intents again
                         await self.send_message("requestPluginIntents", {"intents": intents})
 
             for msg in queued_messages:
                 print(f"[Queue] Sending queued message: {msg['msg_type']}")
                 asyncio.create_task(process_queue_msg(msg["msg_type"], msg["payload"]))
+
     async def initialize_plugin(self):
         try:
             # 1. Set Plugin Manifest

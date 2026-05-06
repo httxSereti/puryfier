@@ -1,19 +1,17 @@
 services:
-  postgres:
-    image: postgres:16-alpine
+  mongo:
+    image: mongo:8
     container_name: puryfi-chaster-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-puryfi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-puryfi}
-      POSTGRES_DB: ${POSTGRES_DB:-puryfi_chaster}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-puryfi}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-puryfi}
     ports:
-      # Exposed on host so the server (running locally, outside Docker) can connect
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-puryfi} -d ${POSTGRES_DB:-puryfi_chaster}" ]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -44,4 +42,4 @@ services:
       - DATABASE_URL=${DATABASE_URL}
 
 volumes:
-  postgres_data:
+  mongo_data:

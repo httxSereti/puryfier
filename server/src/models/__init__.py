@@ -1,2 +1,2 @@
-# types package
+# models package
 from .chaster import *

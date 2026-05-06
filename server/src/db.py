@@ -1,57 +1,38 @@
 import os
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.orm import sessionmaker, Session
-# All SQL models must be imported here so Base.metadata is fully populated
-from models.sql import Base, User, UserLockConfiguration  # noqa: F401
+from beanie import init_beanie
+from pymongo import AsyncMongoClient
+from models.documents import User, UserLockConfiguration, QueuedMessage
 
 
-def _get_engine():
-    """Build the engine lazily so load_dotenv() in main.py runs first."""
+_client: AsyncMongoClient | None = None
+
+
+async def init_db() -> None:
+    """Initialise the MongoDB connection and register all Beanie documents."""
+    global _client
+
     url = os.getenv(
         "DATABASE_URL",
-        "postgresql://puryfi:puryfi@localhost:5432/puryfi_chaster",
+        "mongodb://puryfi:puryfi@localhost:27017/puryfi_chaster?authSource=admin",
     )
-    return create_engine(url, echo=False)
+
+    _client = AsyncMongoClient(url)
+
+    # Extract the database name from the connection string
+    db_name = url.rsplit("/", 1)[-1].split("?")[0] or "puryfi_chaster"
+    print(f"[DB] Connecting to MongoDB: {db_name}")
+
+    await init_beanie(
+        database=_client[db_name],
+        document_models=[User, UserLockConfiguration, QueuedMessage],
+    )
+    print("[DB] Beanie initialised ✓")
 
 
-engine = None
-SessionLocal = None
-
-
-def _ensure_engine():
-    global engine, SessionLocal
-    if engine is None:
-        engine = _get_engine()
-        SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
-
-def init_db() -> None:
-    """Create all tables that do not yet exist. Safe to call on every startup."""
-    _ensure_engine()
-    print(f"[DB] Connecting to: {engine.url}")
-    inspector = inspect(engine)
-    existing = inspector.get_table_names()
-
-    missing = [
-        table
-        for table in Base.metadata.tables
-        if table not in existing
-    ]
-
-    print(f"[DB] Known models: {list(Base.metadata.tables.keys())}")
-
-    if missing:
-        print(f"[DB] Creating missing tables: {missing}")
-        Base.metadata.create_all(engine)
-    else:
-        print("[DB] All tables already exist, skipping creation.")
-
-
-def get_db() -> Session:
-    """Dependency for FastAPI routes: yields a DB session and closes it after use."""
-    _ensure_engine()
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def close_db() -> None:
+    """Cleanly close the MongoDB client."""
+    global _client
+    if _client is not None:
+        _client.close()
+        _client = None
+        print("[DB] MongoDB connection closed")

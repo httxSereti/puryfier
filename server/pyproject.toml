@@ -11,9 +11,12 @@ dependencies = [
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.2",
     "requests>=2.33.0",
-    "sqlalchemy>=2.0.0",
-    "psycopg2-binary>=2.9.0",
+    "beanie>=2.1.0",
     "uvicorn>=0.42.0",
     "websockets>=16.0",
     "cuid2>=2.0.1",
 ]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["src"]
