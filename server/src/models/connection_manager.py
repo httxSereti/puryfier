@@ -1,3 +1,4 @@
+from typing import Dict
 from models.connection import Connection
 
 
@@ -7,29 +8,20 @@ class ConnectionManager:
     def __new__(cls) -> "ConnectionManager":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._connections = []
+            cls._instance._connections: Dict[str, Connection] = {}
         return cls._instance
 
     @property
     def connections(self) -> list[Connection]:
         return self._connections
 
-    def add(self, connection: Connection) -> None:
-        self._connections.append(connection)
+    def add(self, connection: Connection, user_link_token: str) -> None:
+        self._connections[user_link_token] = connection
 
-    def remove(self, connection: Connection) -> None:
-        self._connections.remove(connection)
+    def remove(self, user_link_token: str) -> None:
+        self._connections.pop(user_link_token, None)
 
-    def get_by_username(self, username: str) -> Connection | None:
-        for connection in self._connections:
-            if connection.username == username:
-                return connection
-        return None
-
-    def get_by_link_token(self, link_token: str) -> Connection | None:
-        for connection in self._connections:
-            if connection.configuration.get("linkToken", {}).get("value", "") == link_token:
-                return connection
-        return None
+    def get_by_user_link_token(self, user_link_token: str) -> Connection | None:
+        return self._connections.get(user_link_token)
 
 manager = ConnectionManager()

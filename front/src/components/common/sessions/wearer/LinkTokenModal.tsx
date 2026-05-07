@@ -17,7 +17,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
 
     const handleCopy = async () => {
         if (!token) return;
-        await navigator.clipboard.writeText(token);
+        await navigator.clipboard.writeText(`${import.meta.env.VITE_PURYFI_WS_URL}/${token}`);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -71,13 +71,13 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
                 {token ? (
                     <div className="space-y-3">
                         <p className="text-xs text-slate-400">
-                            Copy this token and paste it into the <span className="text-cyan-300 font-medium">Puryfi plugin settings (Link Token)</span> to complete the link.
+                            Copy this WebSocket URL and paste it into <span className="text-cyan-300 font-medium">'Register new plugin'</span> in <span className="text-cyan-300 font-medium">Extras: Plugins</span> as <span className="text-cyan-300 font-medium">WebSocket</span>.
                         </p>
                         <button
                             onClick={handleCopy}
                             className="group w-full flex items-center justify-between gap-3 bg-slate-950 border border-slate-700 hover:border-cyan-700 rounded-xl px-4 py-3 transition-colors"
                         >
-                            <code className="text-sm font-mono text-cyan-300 truncate">{token}</code>
+                            <code className="text-sm font-mono text-cyan-300 truncate">{import.meta.env.VITE_PURYFI_WS_URL}/{token}</code>
                             {copied
                                 ? <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                                 : <Copy className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 shrink-0 transition-colors" />
@@ -107,14 +107,6 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
                         </button>
                     </div>
                 )}
-                {/* Check synchronization */}
-                {/* <button
-                    onClick={() => window.location.reload()}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-sm font-semibold rounded-xl transition-all border border-slate-700"
-                >
-                    <RefreshCw className="w-4 h-4" />
-                    Check Synchronization
-                </button> */}
             </div>
         </div>
     );

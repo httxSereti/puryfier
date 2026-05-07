@@ -26,7 +26,7 @@ export default function ChasterWearerSession({ session }: { session: ChasterExte
 
                     <button
                         onClick={() => setModalOpen(true)}
-                        className="text-sm font-semibold text-emerald-400 hover:text-emerald-300 underline underline-offset-2 transition-colors"
+                        className="text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
                     >
                         Link
                     </button>

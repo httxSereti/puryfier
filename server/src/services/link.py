@@ -2,7 +2,7 @@ from models.documents.user_lock_configuration import UserLockConfiguration
 from utils.chaster_api import create_custom_log
 
 
-async def link_with_token(link_token: str, username: str) -> bool:
+async def link_with_token(link_token: str) -> bool:
     """
     Look up the UserLockConfiguration matching link_token and mark it as linked.
     Returns True if the link was successful, False otherwise.
@@ -17,7 +17,6 @@ async def link_with_token(link_token: str, username: str) -> bool:
             return False
 
         lock_config.is_linked = True
-        lock_config.puryfi_username = username
         await lock_config.save()
 
         session_id = lock_config.session_id
@@ -28,8 +27,8 @@ async def link_with_token(link_token: str, username: str) -> bool:
         if session_id:
             create_custom_log(
                 session_id=session_id,
-                title="%USER% linked Puryfi",
-                description=f"Puryfi linked as '{username}' — monitoring is now active.",
+                title="Puryfi Plugin is online",
+                description=f"Monitoring is now active with Puryfi.",
                 icon="link",
                 color="#ffffff",
             )

@@ -29,7 +29,7 @@ async def handle_lock_frozen(payload: dict) -> dict:
         print(f"[lock_frozen] lock_on_freeze is False for session {session_id}, ignoring.")
         return {"status": "ok", "action": "lock_frozen_ignored_config_false"}
         
-    connection = manager.get_by_link_token(lock_config.link_token)
+    connection = manager.get_by_user_link_token(lock_config.link_token)
     
     generated_password = secrets.token_urlsafe(16)
     lock_config.lock_password = generated_password

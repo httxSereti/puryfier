@@ -28,7 +28,7 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
         print(f"[lock_unfrozen] unlock_on_unfreeze is False for session {session_id}, ignoring.")
         return {"status": "ok", "action": "lock_unfrozen_ignored_config_false"}
         
-    connection = manager.get_by_link_token(lock_config.link_token)
+    connection = manager.get_by_user_link_token(lock_config.link_token)
     
     # fetch lock_password from lock_config
     retrieved_password = lock_config.lock_password
