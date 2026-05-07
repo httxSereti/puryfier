@@ -16,7 +16,7 @@ async def link_with_token(link_token: str) -> bool:
             print(f"[Link] No UserLockConfiguration found for token {link_token!r}")
             return False
 
-        lock_config.is_linked = True
+        lock_config.has_linked_plugin = True
         await lock_config.save()
 
         session_id = lock_config.session_id

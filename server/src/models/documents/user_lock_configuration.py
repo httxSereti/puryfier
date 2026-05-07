@@ -15,7 +15,7 @@ class UserLockConfiguration(Document):
     link_token: Annotated[str, Indexed(unique=True)] | None = None
 
     # Whether the Puryfi plugin is actively linked to this lock
-    is_linked: bool = False
+    has_linked_plugin: bool = False
 
     # Chaster user id of the keyholder
     keyholder_id: str | None = None
@@ -37,5 +37,5 @@ class UserLockConfiguration(Document):
     def __repr__(self) -> str:
         return (
             f"<UserLockConfiguration id={self.id!r} "
-            f"lock_id={self.lock_id!r} is_linked={self.is_linked}>"
+            f"lock_id={self.lock_id!r} has_linked_plugin={self.has_linked_plugin}>"
         )

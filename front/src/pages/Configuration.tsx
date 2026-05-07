@@ -144,10 +144,10 @@ export default function Configuration() {
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="w-5 h-5 text-slate-400" />
                   <p className="text-sm font-semibold text-slate-200">Puryfi Link:</p>
-                  {configurationData.is_linked ? (
-                    <span className="text-sm font-semibold text-emerald-400">Linked</span>
+                  {configurationData.is_online ? (
+                    <span className="text-sm font-semibold text-emerald-400">Connected</span>
                   ) : (
-                    <span className="text-sm font-semibold text-red-400">Not linked</span>
+                    <span className="text-sm font-semibold text-red-400">Disconnected</span>
                   )}
                 </div>
                 <div className="flex items-center justify-center">

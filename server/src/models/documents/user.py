@@ -16,9 +16,6 @@ class User(Document):
     # Token used to link Puryfi plugin with Chaster extension
     link_token: str | None = None
 
-    # Whether user has linked Puryfi and Chaster
-    is_linked: bool = False
-
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

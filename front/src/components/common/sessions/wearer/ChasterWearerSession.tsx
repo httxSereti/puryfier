@@ -28,7 +28,7 @@ export default function ChasterWearerSession({ session }: { session: ChasterExte
                         onClick={() => setModalOpen(true)}
                         className="text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
                     >
-                        Link
+                        {session.is_online ? "Connected" : "Link"}
                     </button>
 
                 </div>

@@ -1,3 +1,4 @@
+from models.connection_manager import manager
 import os
 import requests
 from cuid2 import cuid_wrapper
@@ -65,10 +66,12 @@ async def fetch_session(mainToken: str):
         await lock_config.insert()
         print(f"[DB] Created UserLockConfiguration for session {lock_id!r}")
 
+    is_online = manager.get_by_user_link_token(lock_config.link_token)
     session_schema = ChasterExtensionSessionSchema(
         id=str(lock_config.id),
         role=data.get("role", ""),
-        is_linked=lock_config.is_linked,
+        is_online=is_online is not None,
+        has_linked_plugin=lock_config.has_linked_plugin,
         link_token=lock_config.link_token,
         lock_on_freeze=lock_config.lock_on_freeze,
         unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
@@ -96,7 +99,7 @@ async def create_link_token(session_id: str):
     return ChasterExtensionSessionSchema(
         id=str(lock_config.id),
         role="",  # role not stored on the config row
-        is_linked=lock_config.is_linked,
+        has_linked_plugin=lock_config.has_linked_plugin,
         link_token=lock_config.link_token,
         lock_on_freeze=lock_config.lock_on_freeze,
         unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
@@ -138,7 +141,6 @@ async def configuration(configurationToken: str):
         schema = ChasterExtensionConfigurationSchema(
             id="",
             role=data.role,
-            is_linked=False,
             link_token=None,
             config=data.config
         )   
@@ -168,7 +170,8 @@ async def configuration(configurationToken: str):
         configuration = ChasterExtensionConfigurationSchema(
             id=str(lock_config.id),
             role=data.role,
-            is_linked=lock_config.is_linked,
+            has_linked_plugin=lock_config.has_linked_plugin,
+            is_online=manager.get_by_user_link_token(lock_config.link_token) is not None,
             link_token=lock_config.link_token,
             config=ChasterExtensionConfigSchema(
                 lock_on_freeze=lock_config.lock_on_freeze,
@@ -181,7 +184,8 @@ async def configuration(configurationToken: str):
         configuration = ChasterExtensionConfigurationSchema(
             id=str(lock_config.id),
             role=data.role,
-            is_linked=lock_config.is_linked,
+            has_linked_plugin=lock_config.has_linked_plugin,
+            is_online=manager.get_by_user_link_token(lock_config.link_token) is not None,
             config=ChasterExtensionConfigSchema(
                 lock_on_freeze=lock_config.lock_on_freeze,
                 unlock_on_unfreeze=lock_config.unlock_on_unfreeze,

@@ -26,7 +26,6 @@ class Connection:
 
         self.username: str | None = None
         self.user_link_token: str = user_link_token
-        self.is_linked: bool = False
 
         self.configuration: dict = {}
         self.intents_granted_event = asyncio.Event()
@@ -139,8 +138,6 @@ class Connection:
         from services.link import link_with_token
         
         if await link_with_token(user_link_token):
-            self.is_linked = True
-            
             queued_messages = await fetch_and_delete_queued_messages(user_link_token)
             
             """

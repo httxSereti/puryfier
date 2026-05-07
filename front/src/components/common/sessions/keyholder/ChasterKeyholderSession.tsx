@@ -18,8 +18,8 @@ export default function ChasterKeyholderSession({ session }: { session: ChasterE
                     <ShieldCheck className="w-5 h-5 text-slate-400" />
                     <p className="text-sm font-medium text-slate-300">Puryfi Link</p>
                 </div>
-                <span className={`text-sm font-semibold ${session.is_linked ? "text-emerald-400" : "text-red-400"}`}>
-                    {session.is_linked ? "Linked" : "Not linked"}
+                <span className={`text-sm font-semibold ${session.is_online ? "text-emerald-400" : "text-red-400"}`}>
+                    {session.is_online ? "Connected" : "Disconnected"}
                 </span>
             </div>
         </div>

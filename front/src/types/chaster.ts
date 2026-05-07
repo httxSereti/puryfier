@@ -54,7 +54,8 @@ export interface ChasterExtensionConfigSchema {
 export interface ChasterExtensionConfigurationSchema {
   id: string;
   role: string;
-  is_linked: boolean;
+  has_linked_plugin: boolean;
+  is_online: boolean;
   link_token: string | null;
   config: ChasterExtensionConfigSchema;
 }

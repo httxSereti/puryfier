@@ -13,7 +13,12 @@ class ChasterExtensionConfigurationSchema(BaseModel):
 
     id: str
     role: str
-    is_linked: bool
+
+    """
+        Puryfi connection status
+    """
+    is_online: bool = False
+    has_linked_plugin: bool = False
     link_token: Optional[str] = None
 
     config: Optional[ChasterExtensionConfigSchema] = None
