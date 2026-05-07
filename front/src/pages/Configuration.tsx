@@ -19,12 +19,19 @@ export default function Configuration() {
   // Keep a mutable ref to the latest config & token so the event listener always has fresh values
   const configRef = useRef<ChasterExtensionConfigurationSchema | null>(null);
   const tokenRef = useRef<string>("");
+  const hasFetched = useRef(false);
 
   useEffect(() => {
     postToParent("capabilities", { features: { save: true } });
   }, []);
 
   useEffect(() => {
+    // Don't fetch session twice (react strict mode re-renders the component on development)
+    if (hasFetched.current)
+      return;
+
+    hasFetched.current = true;
+
     const fetchSession = async () => {
       try {
         if (!window.location.hash) {
