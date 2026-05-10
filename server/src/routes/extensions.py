@@ -137,20 +137,14 @@ async def configuration(configurationToken: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")
 
-    print("\n\n[DATA]")
-    pprint(data)
-
     # no lock active, shared-lock or self-lock so use chaster to save configuration
     if not data.sessionId:
-        print('no active lock, using chaster to save configuration')
-        schema = ChasterExtensionConfigurationSchema(
+        return ChasterExtensionConfigurationSchema(
             id="",
             role=data.role,
-            link_token=None,
-            config=data.config
+            config=data.config,
+            has_session=False
         )   
-        pprint(schema)
-        return schema
     
     # fetch lock_config for session_id
     try:
@@ -176,8 +170,9 @@ async def configuration(configurationToken: str):
             id=str(lock_config.id),
             role=data.role,
             has_linked_plugin=lock_config.has_linked_plugin,
-            is_online=manager.get_by_user_link_token(lock_config.link_token) is not None,
+            is_online=manager.get_by_user_link_token(lock_config.link_token or "") is not None,
             link_token=lock_config.link_token,
+            has_session=True,
             config=ChasterExtensionConfigSchema(
                 lock_on_freeze=lock_config.lock_on_freeze,
                 unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
@@ -190,7 +185,8 @@ async def configuration(configurationToken: str):
             id=str(lock_config.id),
             role=data.role,
             has_linked_plugin=lock_config.has_linked_plugin,
-            is_online=manager.get_by_user_link_token(lock_config.link_token) is not None,
+            is_online=manager.get_by_user_link_token(lock_config.link_token or "") is not None,
+            has_session=True,
             config=ChasterExtensionConfigSchema(
                 lock_on_freeze=lock_config.lock_on_freeze,
                 unlock_on_unfreeze=lock_config.unlock_on_unfreeze,

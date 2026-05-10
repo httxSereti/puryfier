@@ -21,4 +21,8 @@ class ChasterExtensionConfigurationSchema(BaseModel):
     has_linked_plugin: bool = False
     link_token: Optional[str] = None
 
+    """
+        Chaster extension configuration
+    """
+    has_session: bool = False
     config: Optional[ChasterExtensionConfigSchema] = None

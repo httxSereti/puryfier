@@ -57,5 +57,6 @@ export interface ChasterExtensionConfigurationSchema {
   has_linked_plugin: boolean;
   is_online: boolean;
   link_token: string | null;
+  has_session: boolean;
   config: ChasterExtensionConfigSchema;
 }

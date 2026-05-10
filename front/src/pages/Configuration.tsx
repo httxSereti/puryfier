@@ -47,7 +47,7 @@ export default function Configuration() {
 
         tokenRef.current = params.partnerConfigurationToken;
 
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8090";
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
         const response = await axios.get(`${backendUrl}/api/extensions/configuration/${params.partnerConfigurationToken}`);
         setConfigurationData(response.data);
         console.log(response.data)
@@ -83,7 +83,7 @@ export default function Configuration() {
       postToParent("save_loading");
 
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8090";
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
         await axios.put(
           `${backendUrl}/api/extensions/configuration/${tokenRef.current}`,
@@ -119,14 +119,12 @@ export default function Configuration() {
 
         <div className="space-y-2">
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Puryfi Chaster Linker
+            Puryfier
           </h1>
           <p className="text-sm text-slate-400">
             Sync your Chaster lock with Puryfi
           </p>
         </div>
-
-        <div className="w-full h-[1px] bg-slate-800" />
 
         {error ? (
           <div className="w-full p-4 bg-red-950/50 border border-red-900/50 rounded-xl">
@@ -139,19 +137,19 @@ export default function Configuration() {
           </div>
         ) : configurationData ? (
           <div className="w-full space-y-4">
-            <div className="w-full p-4 flex justify-between bg-slate-950 border border-slate-800 rounded-xl space-y-3 items-center">
-              <div className="flex items-center gap-3">
-                <ShieldCheck className="w-5 h-5 text-slate-400" />
-                <p className="text-sm font-semibold text-slate-200">Puryfi Link:</p>
-                {configurationData.is_online ? (
-                  <span className="text-sm font-semibold text-emerald-400">Connected</span>
-                ) : (
-                  <span className="text-sm font-semibold text-red-400">Disconnected</span>
-                )}
+            {configurationData.has_session ? (
+              <div className="w-full p-4 flex justify-between bg-slate-950 border border-slate-800 rounded-xl space-y-3 items-center">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="w-5 h-5 text-slate-400" />
+                  <p className="text-sm font-semibold text-slate-200">Puryfi Status:</p>
+                  {configurationData.is_online ? (
+                    <span className="text-sm font-semibold text-emerald-400">Online</span>
+                  ) : (
+                    <span className="text-sm font-semibold text-red-400">Offline</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center justify-center">
-              </div>
-            </div>
+            ) : null}
 
             <ConfigurationOptions
               config={configurationData.config}
