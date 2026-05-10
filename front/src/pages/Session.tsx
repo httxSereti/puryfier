@@ -7,7 +7,7 @@ import PuryfiConnection from "@/components/common/sessions/PuryfiConnection";
 import MotdCard from "@/components/common/cards/MotdCard";
 import SessionSettings from "@/components/common/sessions/SessionSettings";
 
-export default function Main() {
+export default function Session() {
   const [sessionData, setSessionData] = useState<ChasterExtensionSessionSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,8 +32,8 @@ export default function Main() {
           throw new Error("mainToken not found in parameters.");
         }
 
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8090";
-        const response = await axios.get(`${backendUrl}/api/extensions/auth/sessions/${params.mainToken}`);
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        const response = await axios.get(`${backendUrl}/api/session/${params.mainToken}`);
         setSessionData(response.data);
       } catch (err: any) {
         if (axios.isAxiosError(err)) {
@@ -76,16 +76,13 @@ export default function Main() {
         <MotdCard />
 
         <div className="flex flex-col md:flex-row gap-6 w-full items-stretch flex-1">
-
-          {/* <SessionSidebar session={sessionData} isLoading={isLoading} /> */}
-
           <div className="flex-1 bg-[#14131A] rounded-2xl p-1 flex flex-col items-center relative overflow-hidden">
             <div className="flex flex-col items-center text-center w-full mx-auto relative z-10">
 
               <div className="flex flex-row justify-between items-center w-full p-3">
                 <h1 className="text-xl font-bold tracking-tight text-white">
                   Puryfier
-                  <span className="text-slate-500 text-sm ml-2 font-normal">[0.2.0]</span>
+                  <span className="text-slate-500 text-sm ml-2 font-normal">[v{import.meta.env.VITE_APP_VERSION}]</span>
                 </h1>
                 <div className="flex items-center space-x-2">
                   {sessionData && (

@@ -48,7 +48,7 @@ export default function Configuration() {
         tokenRef.current = params.partnerConfigurationToken;
 
         const backendUrl = import.meta.env.VITE_BACKEND_URL;
-        const response = await axios.get(`${backendUrl}/api/extensions/configuration/${params.partnerConfigurationToken}`);
+        const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
         setConfigurationData(response.data);
         console.log(response.data)
         configRef.current = response.data;
@@ -86,7 +86,7 @@ export default function Configuration() {
         const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
         await axios.put(
-          `${backendUrl}/api/extensions/configuration/${tokenRef.current}`,
+          `${backendUrl}/api/configuration/${tokenRef.current}`,
           configRef.current?.config ?? {},
         );
 

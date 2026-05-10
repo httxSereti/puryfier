@@ -36,7 +36,7 @@ export default function LinkPuryfiCard({ session }: { session: ChasterExtensionS
                 size="sm"
             >
                 <a href="#">
-                    See tutorial (soon) <ArrowUpRightIcon />
+                    See guide (soon) <ArrowUpRightIcon />
                 </a>
             </Button>
             {modalOpen && (

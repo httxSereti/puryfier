@@ -7,7 +7,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import init_db, close_db
-from routes import websocket, webhooks, extensions
+from routes import websocket, webhooks, extensions, configuration
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(websocket.router)
 app.include_router(webhooks.chaster.router)
 app.include_router(extensions.router)
+app.include_router(configuration.router)
 
 if __name__ == "__main__":
     import uvicorn

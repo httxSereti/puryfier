@@ -1,3 +1,3 @@
-from . import websocket, webhooks, extensions
+from . import websocket, webhooks, extensions, configuration
 
-__all__ = ["websocket", "webhooks", "extensions"]
+__all__ = ["websocket", "webhooks", "extensions", "configuration"]

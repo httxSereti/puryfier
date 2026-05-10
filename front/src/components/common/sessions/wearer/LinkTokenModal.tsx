@@ -27,7 +27,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
         setError(null);
         try {
             const backendUrl = import.meta.env.VITE_BACKEND_URL;
-            const response = await axios.post(`${backendUrl}/api/extensions/sessions/${sessionId}/link-token`);
+            const response = await axios.post(`${backendUrl}/api/session/${sessionId}/link-token`);
             const newToken: string = response.data.link_token;
             setToken(newToken);
             onTokenCreated(newToken);
