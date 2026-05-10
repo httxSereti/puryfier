@@ -1,5 +1,7 @@
 import type { ChasterExtensionSessionSchema } from "@/types/api";
 import ShowPuryfiPassword from "@/components/common/sessions/keyholder/ShowPuryfiPassword";
+import ConfigurationSwitch from "@/components/common/configuration/ConfigurationSwitch";
+import { Snowflake, Unlock } from "lucide-react";
 
 export default function SessionSettings({ session }: { session: ChasterExtensionSessionSchema }) {
     return (
@@ -12,23 +14,25 @@ export default function SessionSettings({ session }: { session: ChasterExtension
                 <ShowPuryfiPassword puryfiPassword={session.lock_password} />
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-inner">
-                    <span className="text-sm text-slate-400 font-medium">Lock on Freeze</span>
-                    {session.lock_on_freeze ? (
-                        <span className="text-sm font-black text-cyan-400 uppercase tracking-wider">Enabled</span>
-                    ) : (
-                        <span className="text-sm font-black text-slate-600 uppercase tracking-wider">Disabled</span>
-                    )}
-                </div>
-                <div className="flex flex-col gap-2 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-inner">
-                    <span className="text-sm text-slate-400 font-medium">Unlock on Unfreeze</span>
-                    {session.unlock_on_unfreeze ? (
-                        <span className="text-sm font-black text-emerald-400 uppercase tracking-wider">Enabled</span>
-                    ) : (
-                        <span className="text-sm font-black text-slate-600 uppercase tracking-wider">Disabled</span>
-                    )}
-                </div>
+            <div className="flex flex-col gap-4 w-full">
+                <ConfigurationSwitch
+                    icon={<Snowflake className="w-5 h-5 text-cyan-400" />}
+                    title="Lock on Freeze"
+                    description="Automatically lock Puryfi when lock is frozen"
+                    checked={session.lock_on_freeze}
+                    onChange={() => { }}
+                    baseColor="cyan"
+                    disabled={true}
+                />
+                <ConfigurationSwitch
+                    icon={<Unlock className="w-5 h-5 text-emerald-400" />}
+                    title="Unlock on Unfreeze"
+                    description="Automatically unlock Puryfi when unfreezing"
+                    checked={session.unlock_on_unfreeze}
+                    onChange={() => { }}
+                    baseColor="emerald"
+                    disabled={true}
+                />
             </div>
 
         </div>
