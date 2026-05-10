@@ -66,8 +66,15 @@ async def fetch_session(mainToken: str):
         await lock_config.insert()
         print(f"[DB] Created UserLockConfiguration for session {lock_id!r}")
 
-    is_online = manager.get_by_user_link_token(lock_config.link_token)
-    session_schema = ChasterExtensionSessionSchema(
+    # get if there is an active connection to this session
+    is_online = manager.get_by_user_link_token(lock_config.link_token or "")
+
+    # send lockpassword in clear only to keyholder
+    lock_password = lock_config.lock_password
+    if data.get("role", "") == "wearer" and lock_password:
+        lock_password = "HIDDEN"
+
+    return ChasterExtensionSessionSchema(
         id=str(lock_config.id),
         role=data.get("role", ""),
         is_online=is_online is not None,
@@ -75,10 +82,8 @@ async def fetch_session(mainToken: str):
         link_token=lock_config.link_token,
         lock_on_freeze=lock_config.lock_on_freeze,
         unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
-        lock_password=lock_config.lock_password,
+        lock_password=lock_password,
     )
-
-    return session_schema
 
 
 @router.post("/sessions/{session_id}/link-token", response_model=ChasterExtensionSessionSchema)

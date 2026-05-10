@@ -26,7 +26,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
         setIsCreating(true);
         setError(null);
         try {
-            const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+            const backendUrl = import.meta.env.VITE_BACKEND_URL;
             const response = await axios.post(`${backendUrl}/api/extensions/sessions/${sessionId}/link-token`);
             const newToken: string = response.data.link_token;
             setToken(newToken);
@@ -43,21 +43,18 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
     };
 
     return (
-        /* Backdrop */
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
             onClick={onClose}
         >
-            {/* Panel */}
             <div
-                className="relative w-full max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 space-y-5"
+                className="relative mx-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 space-y-5"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Key className="w-5 h-5 text-cyan-400" />
-                        <h2 className="text-base font-semibold text-slate-100">Link Token</h2>
+                        <h2 className="text-base font-semibold text-slate-100">WebSocket URL</h2>
                     </div>
                     <button
                         onClick={onClose}
@@ -67,11 +64,10 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
                     </button>
                 </div>
 
-                {/* Body */}
                 {token ? (
                     <div className="space-y-3">
                         <p className="text-xs text-slate-400">
-                            Copy this WebSocket URL and paste it into <span className="text-cyan-300 font-medium">'Register new plugin'</span> in <span className="text-cyan-300 font-medium">Extras: Plugins</span> as <span className="text-cyan-300 font-medium">WebSocket</span>.
+                            Use this WebSocket URL to connect Puryfi with Puryfier
                         </p>
                         <button
                             onClick={handleCopy}
@@ -88,7 +84,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
                 ) : (
                     <div className="space-y-3">
                         <p className="text-xs text-slate-400">
-                            No link token yet. Generate one to connect your Chaster lock with Puryfi.
+                            Generate a WebSocket URL to connect your Chaster lock with Puryfi.
                         </p>
                         {error && (
                             <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/40 rounded-lg px-3 py-2">
@@ -102,7 +98,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
                         >
                             {isCreating
                                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
-                                : <><Key className="w-4 h-4" /> Generate token</>
+                                : <><Key className="w-4 h-4" /> Generate WebSocket URL</>
                             }
                         </button>
                     </div>

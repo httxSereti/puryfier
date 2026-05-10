@@ -108,68 +108,66 @@ export default function Configuration() {
 
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[rgb(36,34,45)] text-slate-100 p-4 font-sans">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-8 transition-all hover:shadow-cyan-900/20">
-        <div className="flex flex-col items-center text-center space-y-6">
+    <div className="flex flex-col w-full min-h-screen bg-[#2a2736] text-slate-100 p-4 sm:p-8 font-sans">
+      <div className="flex flex-col items-center text-center space-y-6 max-w-3xl mx-auto w-full">
 
-          <div className="p-4 bg-cyan-950/30 rounded-full border border-cyan-900/50 shadow-inner">
-            <svg className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              Puryfi Chaster Linker
-            </h1>
-            <p className="text-sm text-slate-400">
-              Sync your Chaster lock with Puryfi
-            </p>
-          </div>
-
-          <div className="w-full h-[1px] bg-slate-800" />
-
-          {error ? (
-            <div className="w-full p-4 bg-red-950/50 border border-red-900/50 rounded-xl">
-              <p className="text-sm text-red-400 font-medium">{error}</p>
-            </div>
-          ) : isLoading ? (
-            <div className="flex flex-col items-center justify-center py-6 space-y-4">
-              <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-              <p className="text-sm text-slate-400 animate-pulse">Fetching session...</p>
-            </div>
-          ) : configurationData ? (
-            <div className="w-full space-y-4">
-              <div className="w-full p-4 flex justify-between bg-slate-950 border border-slate-800 rounded-xl space-y-3 items-center">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-slate-400" />
-                  <p className="text-sm font-semibold text-slate-200">Puryfi Link:</p>
-                  {configurationData.is_online ? (
-                    <span className="text-sm font-semibold text-emerald-400">Connected</span>
-                  ) : (
-                    <span className="text-sm font-semibold text-red-400">Disconnected</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-center">
-                </div>
-              </div>
-
-              <ConfigurationOptions
-                config={configurationData.config}
-                onChange={(updatedConfig) => {
-                  setConfigurationData({
-                    ...configurationData,
-                    config: updatedConfig
-                  });
-                  configRef.current = {
-                    ...configurationData,
-                    config: updatedConfig
-                  };
-                }}
-              />
-            </div>
-          ) : null}
+        <div className="p-4 bg-cyan-950/30 rounded-full border border-cyan-900/50 shadow-inner">
+          <svg className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
         </div>
+
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            Puryfi Chaster Linker
+          </h1>
+          <p className="text-sm text-slate-400">
+            Sync your Chaster lock with Puryfi
+          </p>
+        </div>
+
+        <div className="w-full h-[1px] bg-slate-800" />
+
+        {error ? (
+          <div className="w-full p-4 bg-red-950/50 border border-red-900/50 rounded-xl">
+            <p className="text-sm text-red-400 font-medium">{error}</p>
+          </div>
+        ) : isLoading ? (
+          <div className="flex flex-col items-center justify-center py-6 space-y-4">
+            <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+            <p className="text-sm text-slate-400 animate-pulse">Fetching session...</p>
+          </div>
+        ) : configurationData ? (
+          <div className="w-full space-y-4">
+            <div className="w-full p-4 flex justify-between bg-slate-950 border border-slate-800 rounded-xl space-y-3 items-center">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="w-5 h-5 text-slate-400" />
+                <p className="text-sm font-semibold text-slate-200">Puryfi Link:</p>
+                {configurationData.is_online ? (
+                  <span className="text-sm font-semibold text-emerald-400">Connected</span>
+                ) : (
+                  <span className="text-sm font-semibold text-red-400">Disconnected</span>
+                )}
+              </div>
+              <div className="flex items-center justify-center">
+              </div>
+            </div>
+
+            <ConfigurationOptions
+              config={configurationData.config}
+              onChange={(updatedConfig) => {
+                setConfigurationData({
+                  ...configurationData,
+                  config: updatedConfig
+                });
+                configRef.current = {
+                  ...configurationData,
+                  config: updatedConfig
+                };
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );
