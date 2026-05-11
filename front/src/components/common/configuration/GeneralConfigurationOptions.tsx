@@ -1,13 +1,13 @@
 import { Snowflake, Unlock } from "lucide-react";
 import type { ChasterExtensionConfigSchema } from "@/types/chaster";
-import ConfigurationSwitch from "./ConfigurationSwitch";
+import ConfigurationSwitch from "@/components/common/configuration/ConfigurationSwitch";
 
-interface ConfigurationOptionsProps {
+interface GeneralConfigurationOptionsProps {
     config: ChasterExtensionConfigSchema;
     onChange: (updatedConfig: ChasterExtensionConfigSchema) => void;
 }
 
-export default function ConfigurationOptions({ config, onChange }: ConfigurationOptionsProps) {
+export default function GeneralConfigurationOptions({ config, onChange }: GeneralConfigurationOptionsProps) {
     const handleToggle = (field: keyof ChasterExtensionConfigSchema) => {
         onChange({
             ...config,
@@ -17,6 +17,10 @@ export default function ConfigurationOptions({ config, onChange }: Configuration
 
     return (
         <div className="flex flex-col gap-4 mt-4 w-full">
+            <h6 className="text-xs font-mono tracking-tight text-gray-500">
+                General
+            </h6>
+
             <ConfigurationSwitch
                 icon={<Snowflake className="w-5 h-5 text-cyan-400" />}
                 title="Lock on Freeze"

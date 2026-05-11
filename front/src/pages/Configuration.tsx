@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import axios from "axios";
 import type { ChasterExtensionConfigurationSchema } from "@/types/chaster";
-import ConfigurationOptions from "@/components/common/configuration/ConfigurationOptions";
+import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
+import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
 
 function postToParent(event: string, payload?: object) {
   window.parent.postMessage(
@@ -119,18 +120,16 @@ export default function Configuration() {
 
         <div className="space-y-2">
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Puryfier
+            Puryfier [v{import.meta.env.VITE_APP_VERSION}]
           </h1>
-          <p className="text-sm text-slate-400">
-            Sync your Chaster lock with Puryfi
-          </p>
         </div>
 
         {error ? (
           <div className="w-full p-4 bg-red-950/50 border border-red-900/50 rounded-xl">
             <p className="text-sm text-red-400 font-medium">{error}</p>
           </div>
-        ) : isLoading ? (
+        ) : null}
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-6 space-y-4">
             <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
             <p className="text-sm text-slate-400 animate-pulse">Fetching session...</p>
@@ -151,7 +150,21 @@ export default function Configuration() {
               </div>
             ) : null}
 
-            <ConfigurationOptions
+            <GeneralConfigurationOptions
+              config={configurationData.config}
+              onChange={(updatedConfig) => {
+                setConfigurationData({
+                  ...configurationData,
+                  config: updatedConfig
+                });
+                configRef.current = {
+                  ...configurationData,
+                  config: updatedConfig
+                };
+              }}
+            />
+
+            <CensoredMediaOptions
               config={configurationData.config}
               onChange={(updatedConfig) => {
                 setConfigurationData({

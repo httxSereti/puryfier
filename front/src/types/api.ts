@@ -6,7 +6,15 @@ export interface ChasterExtensionSessionSchema {
     is_online: boolean;
     link_token: string | null;
 
-    lock_on_freeze: boolean;
-    unlock_on_unfreeze: boolean;
+    config: {
+        lock_on_freeze: boolean;
+        unlock_on_unfreeze: boolean;
+        censorPicsConfig: {
+            enabled: boolean;
+            limit_count: number;
+            added_duration: number;
+        };
+
+    };
     lock_password: string | null;
 }

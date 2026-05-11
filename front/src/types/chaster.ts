@@ -49,6 +49,12 @@ export interface PartnerGetSessionAuthRepDto {
 export interface ChasterExtensionConfigSchema {
   lock_on_freeze: boolean;
   unlock_on_unfreeze: boolean;
+
+  censorPicsConfig: {
+    enabled: boolean;
+    limit_count: number;
+    added_duration: number;
+  }
 }
 
 export interface ChasterExtensionConfigurationSchema {
