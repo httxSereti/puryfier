@@ -1,23 +1,28 @@
-# Puryfi-Chaster-Linker
+<p align="center">
+  <img src="front/public/puryfier_main.png" width="600px" alt="Puryfier" />
+  <br><b>🌙 Puryfier</b>
+</p>
 
-Puryfi plugin and Chaster extension to link [Chaster](https://chaster.app/) & [Puryfi](https://pury.fi/).
-Atm, project is in development it'll evolve when i'll have time and ideas.
-The code is messy, i'll clean it up when i'll have time, the goal is to increment and test features/bugs.
-I'll make public this extension on Chaster extension when it'll be ready.
+**Puryfier** is a Chaster extension that link [Pury.fi](https://pury.fi/) with [Chaster.app](https://chaster.app/) to provide more fun to your chastity locks and self lock.
 
-## Features
+## ✨ Key Features
 
 - ❄️ Lock & Enable Puryfi when your lock is frozen.
 - 🔓 Unlock & Disable Puryfi when your lock is unfrozed.
+- 📸 Add time when a media is censored by Puryfi.
 
-## Requirements
+## 🚀 Goals
+
+Censorship is fun, even more when involving other things such as Chastity, Denial and more.. Puryfier is something made to help you to have fun with these.
+
+## 📖 Requirements
 
 - Puryfi 0.8.6.0 or higher
 - Docker & Docker Compose
 - Chaster Extension (+ public exposed endpoints for webhook)
 - Public endpoint (can use ngrok, cloudflared, etc.)
 
-## Run
+## 🌟 Run
 
 **⚠ Fill the `.env` file before running using docker compose.**
 
@@ -28,7 +33,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-## How to use
+## ❓ How to use
 
 1. Copy .env.example as .env and fill it
 2. Create a Chaster extension with a public reachable endpoints for webhook (i personally use ngrok)
@@ -42,3 +47,12 @@ Webhook URL: https://<your-public-domain>/api/webhooks/extensions/chaster
 5. Use the Chaster extension (open main page of the extension as wearer only) to generate a linking token
 6. Link Chaster extension in the plugin settings (copy paste the token)
 7. Enjoy!
+
+## 🤝 How to Contribute / Contact Us
+
+I've made a discord server to centralize information, suggestions, bugs and more.
+You can join it [here](https://discord.gg/vD8zyyMXne)
+
+* 🌍 [Website](https://paa.ge/sereti)
+* ✉️ [Email](mailto:httxsereti@gmail.com)
+* 💜 [Discord](https://discord.com/users/939288874281222225)
