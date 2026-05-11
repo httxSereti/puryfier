@@ -1,6 +1,6 @@
 [project]
 name = "puryfi-chaster-linker-ws"
-version = "1.0.0"
+version = "0.2.0"
 description = "Puryfi Chaster Linker by PluneCorp"
 authors = [{ name = "Sereti" }]
 readme = "README.md"

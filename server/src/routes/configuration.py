@@ -3,9 +3,9 @@ import os
 import requests
 from cuid2 import cuid_wrapper
 from fastapi import APIRouter, HTTPException
-from models.chaster import PartnerGetSessionAuthRepDto, PartnerConfigurationForPublic
+from typings.chaster import PartnerConfigurationForPublic
 from models.documents.user_lock_configuration import UserLockConfiguration
-from schemas import ChasterExtensionSessionSchema, ChasterExtensionConfigurationSchema, ChasterExtensionConfigSchema
+from schemas import ChasterExtensionConfigurationSchema, ChasterExtensionConfigSchema
 from pprint import pprint
 
 router = APIRouter(prefix="/api/configuration", tags=["configuration"])
@@ -61,8 +61,7 @@ async def configuration(configuration_token: str):
         # use the configuration from chaster (if it self lock or shared lock)
         lock_config = UserLockConfiguration(
             session_id=data.sessionId,
-            lock_on_freeze=data.config.get("lock_on_freeze", False),
-            unlock_on_unfreeze=data.config.get("unlock_on_unfreeze", False),
+            config=data.config
         )
         await lock_config.insert()
         print(f"[DB] Created UserLockConfiguration for wearer session {data.sessionId!r} via config hook")
@@ -75,10 +74,7 @@ async def configuration(configuration_token: str):
             is_online=manager.get_by_user_link_token(lock_config.link_token or "") is not None,
             link_token=lock_config.link_token,
             has_session=True,
-            config=ChasterExtensionConfigSchema(
-                lock_on_freeze=lock_config.lock_on_freeze,
-                unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
-            ),
+            config=lock_config.config,
         )
 
         return configuration
@@ -89,10 +85,7 @@ async def configuration(configuration_token: str):
             has_linked_plugin=lock_config.has_linked_plugin,
             is_online=manager.get_by_user_link_token(lock_config.link_token or "") is not None,
             has_session=True,
-            config=ChasterExtensionConfigSchema(
-                lock_on_freeze=lock_config.lock_on_freeze,
-                unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
-            ),
+            config=lock_config.config,
         )
 
         return configuration
@@ -130,9 +123,11 @@ async def update_configuration(configuration_token: str, payload: dict):
             )
             if lock_config:
                 print(f"[config-put] found lock_config id: {lock_config.id}")
-                lock_config.lock_on_freeze = payload.get("lock_on_freeze", lock_config.lock_on_freeze)
-                lock_config.unlock_on_unfreeze = payload.get("unlock_on_unfreeze", lock_config.unlock_on_unfreeze)
+                
+                lock_config.config = data.get("config")
                 await lock_config.save()
+
+                manager.send_config_update(lock_config.link_token or "", lock_config.config)
                 print(f"[DB] Updated UserLockConfiguration for session {session_id!r}")
             else:
                 print(f"[config-put] NO lock_config found for session_id: {session_id}")

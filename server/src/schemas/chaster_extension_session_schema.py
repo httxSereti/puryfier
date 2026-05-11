@@ -1,3 +1,4 @@
+from schemas.chaster_extension_configuration_schema import ChasterExtensionConfigSchema
 from pydantic import BaseModel, ConfigDict
 
 
@@ -21,6 +22,4 @@ class ChasterExtensionSessionSchema(BaseModel):
     """
         Lock configuration
     """
-    lock_on_freeze: bool = False
-    lock_password: str | None = None
-    unlock_on_unfreeze: bool = False
+    config: ChasterExtensionConfigSchema | None = None

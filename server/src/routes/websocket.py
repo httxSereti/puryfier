@@ -1,3 +1,5 @@
+from fastapi import HTTPException
+from models.documents import UserLockConfiguration
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from models.connection import Connection
 from models.connection_manager import manager
@@ -12,8 +14,20 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
     """
     await websocket.accept()
 
+    try:
+        user_lock_config = await UserLockConfiguration.find_one(
+            UserLockConfiguration.link_token == user_link_token
+        )
+        
+        if user_lock_config is None:
+            print(f"[WS-Puryfi] User lock configuration not found for user_token: '{user_link_token}'")
+            return
+    except Exception as e:
+        print(f"[WS-Puryfi] Error fetching user lock configuration: {e}")
+        return
+
     # connect WebSocket
-    connection = Connection(websocket, user_link_token)
+    connection = Connection(websocket, user_lock_config)
     manager.add(connection, user_link_token)
 
     print(f"[WS-Puryfi] Connection established for user_token: '{user_link_token}'")

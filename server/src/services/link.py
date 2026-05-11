@@ -27,7 +27,8 @@ async def link_with_token(link_token: str) -> bool:
         if session_id:
             create_custom_log(
                 session_id=session_id,
-                title="Puryfi Plugin is online",
+                role="user",
+                title="%USER% linked Puryfi",
                 description=f"Monitoring is now active with Puryfi.",
                 icon="link",
                 color="#ffffff",

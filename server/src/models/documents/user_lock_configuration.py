@@ -1,5 +1,6 @@
 from typing import Annotated
 from beanie import Document, Indexed
+from schemas import ChasterExtensionConfigSchema
 
 
 class UserLockConfiguration(Document):
@@ -28,8 +29,7 @@ class UserLockConfiguration(Document):
 
     # Configurations
     lock_password: str | None = None
-    lock_on_freeze: bool = False
-    unlock_on_unfreeze: bool = False
+    config: ChasterExtensionConfigSchema
 
     class Settings:
         name = "users_lock_configurations"

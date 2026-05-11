@@ -1,13 +1,17 @@
+from utils.chaster_api import create_custom_log
+from models.documents import UserLockConfiguration
+from typings.puryfi_enums import PuryfiObjectLabel
 import asyncio
 import msgpack
 from fastapi import WebSocket
-from utils.chaster_api import addDurationToLock
+from services.chaster import add_time_to_lock
+
 from services.queue import fetch_and_delete_queued_messages
 
 manifest = {
-    "name": "Puryfi-Chaster-Linker",
-    "version": "1.0.0",
-    "description": "Link Puryfi with your Chaster lock",
+    "name": "Puryfier",
+    "version": "0.2.0",
+    "description": "Link Chaster with Puryfi",
     "author": "Sereti",
     "website": "https://paa.ge/sereti",
 }
@@ -16,18 +20,22 @@ intents = [
     "readUserState", # read username
     "writeLockConfigurationState", # lock puryfi
     "writeEnabledState", # enable/disable puryfi
+    "readMediaProcesses" # read media processes
 ]
 
 class Connection:
-    def __init__(self, websocket: WebSocket, user_link_token: str):
+    def __init__(self, websocket: WebSocket, user_lock_config: UserLockConfiguration):
         self.websocket = websocket
         self.next_response_id = 0
         self.pending_requests = {}
 
-        self.username: str | None = None
-        self.user_link_token: str = user_link_token
-
         self.configuration: dict = {}
+
+        self.username: str | None = None
+        self.user_link_token: str = user_lock_config.link_token or ""
+        self.user_lock_config: UserLockConfiguration = user_lock_config
+        self.seen_censored_objects: int = 0
+
         self.intents_granted_event = asyncio.Event()
 
     async def send_message(self, msg_type: str, payload: dict) -> dict:
@@ -85,7 +93,32 @@ class Connection:
             required_intents = intents
             if all(intent in granted_intents for intent in required_intents):
                 self.intents_granted_event.set()
-                
+            
+        elif msg_type == "staticMediaScan":
+            objects = payload.get("objects", [])
+            
+            if len(objects) > 0 and self.user_lock_config.config.censorPicsConfig.enabled:
+                self.seen_censored_objects += 1
+
+                if self.seen_censored_objects >= self.user_lock_config.config.censorPicsConfig.limit_count:
+                    self.seen_censored_objects = 0
+                    
+                    if self.user_lock_config.session_id:
+                        success = add_time_to_lock(self.user_lock_config.session_id, self.user_lock_config.config.censorPicsConfig.added_duration)
+                        if success:
+                            create_custom_log(
+                                self.user_lock_config.session_id,
+                                role="extension",
+                                title="%USER% added time!",
+                                description=f"{self.user_lock_config.config.censorPicsConfig.added_duration} seconds added!",
+                                icon="clock",
+                                color="#ffffff"
+                            )
+
+                # for item in objects:
+                #     label = PuryfiObjectLabel.get_name(item.get("label", ""))
+                #     print(f"[Static Media Scan] Detected:{label}")
+
         if response_id is not None and response is not None:
             await self.send_response(response_id, response)
 
@@ -126,6 +159,11 @@ class Connection:
             # Get User State for username
             res = await self.send_message("getState", {"path": "user.username"})
             self.username = res.get("value")
+            
+            # Subscribe to static media scans
+            res = await self.send_message("subscribeToStaticMediaScans", {})
+            if res.get("type", "") == "error":
+                print(f"Failed to subscribe to static media scans: {res.get('message')}")
 
         except Exception as e:
             print(f"Initialization error: {e}")

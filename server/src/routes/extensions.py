@@ -3,7 +3,7 @@ import os
 import requests
 from cuid2 import cuid_wrapper
 from fastapi import APIRouter, HTTPException
-from models.chaster import PartnerGetSessionAuthRepDto, PartnerConfigurationForPublic
+from typings.chaster import PartnerGetSessionAuthRepDto, PartnerConfigurationForPublic
 from models.documents.user_lock_configuration import UserLockConfiguration
 from schemas import ChasterExtensionSessionSchema, ChasterExtensionConfigurationSchema, ChasterExtensionConfigSchema
 from pprint import pprint
@@ -60,8 +60,9 @@ async def fetch_session(main_token: str):
             lock_id=lock_id or None,
             keyholder_id=keyholder_id,
             wearer_id=wearer_id,
-            lock_on_freeze=data.get("session", {}).get("config", {}).get("lock_on_freeze", False),
-            unlock_on_unfreeze=data.get("session", {}).get("config", {}).get("unlock_on_unfreeze", False),
+            config=ChasterExtensionConfigSchema(
+                **data.get("session", {}).get("config", {}),
+            ),
         )
         await lock_config.insert()
         print(f"[DB] Created UserLockConfiguration for session {lock_id!r}")
@@ -80,8 +81,7 @@ async def fetch_session(main_token: str):
         is_online=is_online is not None,
         has_linked_plugin=lock_config.has_linked_plugin,
         link_token=lock_config.link_token,
-        lock_on_freeze=lock_config.lock_on_freeze,
-        unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
+        config=lock_config.config,
         lock_password=lock_password,
     )
 
@@ -106,7 +106,7 @@ async def create_link_token(session_id: str):
         role="",  # role not stored on the config row
         has_linked_plugin=lock_config.has_linked_plugin,
         link_token=lock_config.link_token,
-        lock_on_freeze=lock_config.lock_on_freeze,
-        unlock_on_unfreeze=lock_config.unlock_on_unfreeze,
+        lock_on_freeze=lock_config.config.lock_on_freeze,
+        unlock_on_unfreeze=lock_config.config.unlock_on_unfreeze,
         lock_password=lock_config.lock_password,
     )
