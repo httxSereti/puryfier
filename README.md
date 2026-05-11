@@ -27,8 +27,8 @@ Censorship is fun, even more when involving other things such as Chastity, Denia
 **⚠ Fill the `.env` file before running using docker compose.**
 
 ```bash
-git clone https://github.com/httxSereti/puryfi-chaster-linker.git
-cd puryfi-chaster-linker
+git clone https://github.com/httxSereti/puryfier.git
+cd puryfier
 cp .env.example .env
 docker compose up -d
 ```
