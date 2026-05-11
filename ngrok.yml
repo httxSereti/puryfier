@@ -1,0 +1,10 @@
+version: "3"
+agent:
+  authtoken: ${NGROK_AUTHTOKEN}
+tunnels:
+  frontend:
+    proto: http
+    addr: front:80
+  backend:
+    proto: http
+    addr: server:8000

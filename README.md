@@ -30,23 +30,25 @@ Censorship is fun, even more when involving other things such as Chastity, Denia
 git clone https://github.com/httxSereti/puryfier.git
 cd puryfier
 cp .env.example .env
+# Edit .env and provide your NGROK_AUTHTOKEN
 docker compose up -d
 ```
 
 ## ❓ How to use
 
-1. Copy .env.example as .env and fill it
-2. Create a Chaster extension with a public reachable endpoints for webhook (i personally use ngrok)
+1. Copy .env.example as .env and fill it. Make sure to get your `NGROK_AUTHTOKEN` from [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) and add it to the file.
+2. Run using Docker Compose: `docker compose up -d`
+3. After starting, go to `http://localhost:4040` to see your Ngrok dashboard. There you will find the 2 public URLs provided by Ngrok (one for the `frontend`, one for the `backend`).
+4. Create a Chaster extension with these URLs .
 ```
-Main page URL: http://localhost:5173/extension/main
-Configuration page URL: http://localhost:5173/extension/configuration
-Webhook URL: https://<your-public-domain>/api/webhooks/extensions/chaster
+Main page URL: <frontend-ngrok-url>/extension/main
+Configuration page URL: <frontend-ngrok-url>/extension/configuration
+Webhook URL: <backend-ngrok-url>/api/webhooks/extensions/chaster
 ```
-3. Run using Docker Compose
-4. Open Puryfi -> Plugins -> Register new plugin -> WebSocket (default url: ws://localhost:8000)
-5. Use the Chaster extension (open main page of the extension as wearer only) to generate a linking token
-6. Link Chaster extension in the plugin settings (copy paste the token)
-7. Enjoy!
+5. Open Puryfi -> Plugins -> Register new plugin -> WebSocket (url: ws://<backend-ngrok-domain> without https://)
+6. Use the Chaster extension (open main page of the extension as wearer only) to generate a linking token
+7. Link Chaster extension in the plugin settings (copy paste the token)
+8. Enjoy!
 
 ## 🤝 How to Contribute / Contact Us
 

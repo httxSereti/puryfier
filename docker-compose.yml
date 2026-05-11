@@ -41,5 +41,20 @@ services:
       - CHASTER_WEBHOOK_PWD=${CHASTER_WEBHOOK_PWD}
       - DATABASE_URL=${DATABASE_URL}
 
+  ngrok:
+    image: ngrok/ngrok:alpine
+    container_name: puryfi-chaster-ngrok
+    restart: unless-stopped
+    ports:
+      - "4040:4040"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml:ro
+    command: ["start", "--all", "--config", "/etc/ngrok.yml"]
+    depends_on:
+      - front
+      - server
+
 volumes:
   mongo_data:
