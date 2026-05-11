@@ -30,16 +30,16 @@ Censorship is fun, even more when involving other things such as Chastity, Denia
 git clone https://github.com/httxSereti/puryfier.git
 cd puryfier
 cp .env.example .env
-# Edit .env and provide your NGROK_AUTHTOKEN
 docker compose up -d
 ```
 
 ## ❓ How to use
 
 1. Copy .env.example as .env and fill it. Make sure to get your `NGROK_AUTHTOKEN` from [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) and add it to the file.
-2. Run using Docker Compose: `docker compose up -d`
+2. Run using the start script: `python start.py`
+   *(This script will start ngrok, fetch the public URLs, save them to your .env file, and then build and start the rest of the containers automatically)*
 3. After starting, go to `http://localhost:4040` to see your Ngrok dashboard. There you will find the 2 public URLs provided by Ngrok (one for the `frontend`, one for the `backend`).
-4. Create a Chaster extension with these URLs .
+4. Create a Chaster extension with these URLs.
 ```
 Main page URL: <frontend-ngrok-url>/extension/main
 Configuration page URL: <frontend-ngrok-url>/extension/configuration

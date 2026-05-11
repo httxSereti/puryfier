@@ -1,4 +1,4 @@
-import { Snowflake, Unlock } from "lucide-react";
+import { Snowflake } from "lucide-react";
 import type { ChasterExtensionConfigSchema } from "@/types/chaster";
 import ConfigurationSwitch from "@/components/common/configuration/ConfigurationSwitch";
 import { Input } from "@/components/ui/input";

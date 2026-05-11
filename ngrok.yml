@@ -1,6 +1,4 @@
 version: "3"
-agent:
-  authtoken: ${NGROK_AUTHTOKEN}
 tunnels:
   frontend:
     proto: http

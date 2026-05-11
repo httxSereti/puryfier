@@ -11,7 +11,7 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,6 +40,8 @@ services:
       - CHASTER_WEBHOOK_USER=${CHASTER_WEBHOOK_USER}
       - CHASTER_WEBHOOK_PWD=${CHASTER_WEBHOOK_PWD}
       - DATABASE_URL=${DATABASE_URL}
+      - BACKEND_URL=${BACKEND_URL}
+      - FRONT_URL=${FRONT_URL}
 
   ngrok:
     image: ngrok/ngrok:alpine
@@ -51,7 +53,7 @@ services:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     volumes:
       - ./ngrok.yml:/etc/ngrok.yml:ro
-    command: ["start", "--all", "--config", "/etc/ngrok.yml"]
+    command: [ "start", "--all", "--config", "/etc/ngrok.yml" ]
     depends_on:
       - front
       - server
