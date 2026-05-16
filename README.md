@@ -8,8 +8,8 @@
 ## ✨ Key Features
 
 - ❄️ Lock & Enable Puryfi when your lock is frozen.
-- 🔓 Unlock & Disable Puryfi when your lock is unfrozed.
-- 📸 Add time when a media is censored by Puryfi.
+- 🔓 Unlock & Disable Puryfi when your lock is unfrozen.
+- 📸 Add time when media is censored by Puryfi.
 
 ## 🚀 Goals
 
@@ -17,10 +17,10 @@ Censorship is fun, even more when involving other things such as Chastity, Denia
 
 ## 📖 Requirements
 
-- Puryfi 0.8.6.0 or higher
-- Docker & Docker Compose
-- Chaster Extension (+ public exposed endpoints for webhook)
-- Public endpoint (can use ngrok, cloudflared, etc.)
+- Puryfi 0.8.6.0 or higher (https://pury.fi)
+- Docker (https://docs.docker.com/get-started/get-docker/)
+- Chaster API Access & a Chaster Extension (https://chaster.app/developers/applications)
+- A way to expose the backend to Internet to receive Chaster webhooks (e.g. Cloudflare tunnel, ngrok...)
 
 ## 🌟 Run
 
@@ -35,20 +35,18 @@ docker compose up -d
 
 ## ❓ How to use
 
-1. Copy .env.example as .env and fill it. Make sure to get your `NGROK_AUTHTOKEN` from [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) and add it to the file.
-2. Run using the start script: `python start.py`
-   *(This script will start ngrok, fetch the public URLs, save them to your .env file, and then build and start the rest of the containers automatically)*
-3. After starting, go to `http://localhost:4040` to see your Ngrok dashboard. There you will find the 2 public URLs provided by Ngrok (one for the `frontend`, one for the `backend`).
-4. Create a Chaster extension with these URLs.
+1. Copy .env.example as .env and fill it.
+2. Run using Docker `docker compose up -d`
+3. Create a Chaster extension with these URLs.
 ```
-Main page URL: <frontend-ngrok-url>/extension/main
-Configuration page URL: <frontend-ngrok-url>/extension/configuration
-Webhook URL: <backend-ngrok-url>/api/webhooks/extensions/chaster
+Main page URL: <frontend-url>/extension/main
+Configuration page URL: <frontend-url>/extension/configuration
+Webhook URL: <backend-url>/api/webhooks/extensions/chaster
 ```
-5. Open Puryfi -> Plugins -> Register new plugin -> WebSocket (url: ws://<backend-ngrok-domain> without https://)
-6. Use the Chaster extension (open main page of the extension as wearer only) to generate a linking token
-7. Link Chaster extension in the plugin settings (copy paste the token)
-8. Enjoy!
+4. Create a Lock or Self-Lock with this extension.
+5. Go to the extension in the lock settings page.
+6. Link Chaster and Puryfi.
+7. Enjoy!
 
 ## 🤝 How to Contribute / Contact Us
 

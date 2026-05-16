@@ -1,7 +1,7 @@
 services:
   mongo:
     image: mongo:8
-    container_name: puryfi-chaster-db
+    container_name: puryfier-db
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-puryfi}
@@ -20,9 +20,11 @@ services:
     build:
       context: ./front
       dockerfile: Dockerfile
-      args:
-        VITE_BACKEND_URL: ${BACKEND_URL:-http://localhost:8000}
-    container_name: puryfi-chaster-front
+    container_name: puryfier-front
+    environment:
+      - VITE_BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
+      - VITE_PURYFI_WS_URL=${WEBSOCKET_URL:-ws://localhost:8000}
+      - VITE_APP_VERSION="0.2.0"
     restart: unless-stopped
     ports:
       - "5173:80"
@@ -31,7 +33,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: puryfi-chaster-server
+    container_name: puryfier-server
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -40,23 +42,9 @@ services:
       - CHASTER_WEBHOOK_USER=${CHASTER_WEBHOOK_USER}
       - CHASTER_WEBHOOK_PWD=${CHASTER_WEBHOOK_PWD}
       - DATABASE_URL=${DATABASE_URL}
-      - BACKEND_URL=${BACKEND_URL}
-      - FRONT_URL=${FRONT_URL}
-
-  ngrok:
-    image: ngrok/ngrok:alpine
-    container_name: puryfi-chaster-ngrok
-    restart: unless-stopped
-    ports:
-      - "4040:4040"
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    volumes:
-      - ./ngrok.yml:/etc/ngrok.yml:ro
-    command: [ "start", "--all", "--config", "/etc/ngrok.yml" ]
-    depends_on:
-      - front
-      - server
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
+      - FRONT_URL=${FRONT_URL:-http://localhost:5173}
+      - WEBSOCKET_URL=${WEBSOCKET_URL:-ws://localhost:8000}
 
 volumes:
   mongo_data:
