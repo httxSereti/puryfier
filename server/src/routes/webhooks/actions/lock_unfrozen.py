@@ -16,7 +16,7 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
         UserLockConfiguration.session_id == session_id
     )
     
-    if not lock_config:
+    if not lock_config or not lock_config.config:
         print(f"[lock_unfrozen] No UserLockConfiguration found for session {session_id}")
         return {"status": "ok", "action": "lock_unfrozen_ignored_no_config"}
         
@@ -24,7 +24,7 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
         print(f"[lock_unfrozen] No link_token in UserLockConfiguration for session {session_id}")
         return {"status": "ok", "action": "lock_unfrozen_ignored_no_link_token"}
         
-    if not lock_config.unlock_on_unfreeze:
+    if not lock_config.config.unlock_on_unfreeze:
         print(f"[lock_unfrozen] unlock_on_unfreeze is False for session {session_id}, ignoring.")
         return {"status": "ok", "action": "lock_unfrozen_ignored_config_false"}
         
