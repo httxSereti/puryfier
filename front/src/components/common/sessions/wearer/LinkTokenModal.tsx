@@ -31,7 +31,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
             const newToken: string = response.data.link_token;
             setToken(newToken);
             onTokenCreated(newToken);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError(
                 axios.isAxiosError(err)
                     ? err.response?.data?.detail || "Failed to create token."
@@ -73,7 +73,7 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
                             onClick={handleCopy}
                             className="group w-full flex items-center justify-between gap-3 bg-slate-950 border border-slate-700 hover:border-cyan-700 rounded-xl px-4 py-3 transition-colors"
                         >
-                            <code className="text-sm font-mono text-cyan-300 truncate">{import.meta.env.VITE_PURYFI_WS_URL}/{token}</code>
+                            <div className="text-sm font-mono text-cyan-300 truncate">{import.meta.env.VITE_PURYFI_WS_URL}/{token}</div>
                             {copied
                                 ? <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                                 : <Copy className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 shrink-0 transition-colors" />
