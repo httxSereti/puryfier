@@ -1,4 +1,34 @@
 services:
+  traefik:
+    image: traefik:v3.6
+    container_name: puryfier-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=puryfier_proxy
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # Redirection HTTP -> HTTPS
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # Let's Encrypt via DNS challenge Cloudflare
+      - --certificatesresolvers.cf.acme.dnschallenge=true
+      - --certificatesresolvers.cf.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cf.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cf.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.cf.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - proxy
+
   mongo:
     image: mongo:8
     container_name: puryfier-db
@@ -6,8 +36,6 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-puryfi}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-puryfi}
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -15,19 +43,28 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - internal
 
   front:
     build:
       context: ./front
       dockerfile: Dockerfile
     container_name: puryfier-front
-    environment:
-      - VITE_BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
-      - VITE_PURYFI_WS_URL=${WEBSOCKET_URL:-ws://localhost:8000}
-      - VITE_APP_VERSION="0.2.0"
     restart: unless-stopped
-    ports:
-      - "5173:80"
+    environment:
+      - VITE_BACKEND_URL=${BACKEND_URL:-https://api.example.com}
+      - VITE_PURYFI_WS_URL=${WEBSOCKET_URL:-wss://api.example.com}
+      - VITE_APP_VERSION="0.2.1"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=puryfier_proxy
+      - traefik.http.routers.front.rule=Host(`${FRONT_DOMAIN}`)
+      - traefik.http.routers.front.entrypoints=websecure
+      - traefik.http.routers.front.tls.certresolver=cf
+      - traefik.http.services.front.loadbalancer.server.port=80
+    networks:
+      - proxy
 
   server:
     build:
@@ -35,16 +72,29 @@ services:
       dockerfile: Dockerfile
     container_name: puryfier-server
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment:
       - CHASTER_DEVELOPER_TOKEN=${CHASTER_DEVELOPER_TOKEN}
       - CHASTER_WEBHOOK_USER=${CHASTER_WEBHOOK_USER}
       - CHASTER_WEBHOOK_PWD=${CHASTER_WEBHOOK_PWD}
       - DATABASE_URL=${DATABASE_URL}
-      - BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
-      - FRONT_URL=${FRONT_URL:-http://localhost:5173}
-      - WEBSOCKET_URL=${WEBSOCKET_URL:-ws://localhost:8000}
+      - BACKEND_URL=${BACKEND_URL:-https://api.example.com}
+      - FRONT_URL=${FRONT_URL:-https://app.example.com}
+      - WEBSOCKET_URL=${WEBSOCKET_URL:-wss://api.example.com}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=puryfier_proxy
+      - traefik.http.routers.server.rule=Host(`${API_DOMAIN}`)
+      - traefik.http.routers.server.entrypoints=websecure
+      - traefik.http.routers.server.tls.certresolver=cf
+      - traefik.http.services.server.loadbalancer.server.port=8000
+    networks:
+      - proxy
+      - internal
 
 volumes:
   mongo_data:
+  traefik_letsencrypt:
+
+networks:
+  proxy:
+  internal:

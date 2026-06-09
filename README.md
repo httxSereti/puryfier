@@ -20,7 +20,7 @@ Censorship is fun, even more when involving other things such as Chastity, Denia
 - Puryfi 0.8.6.0 or higher (https://pury.fi)
 - Docker (https://docs.docker.com/get-started/get-docker/)
 - Chaster API Access & a Chaster Extension (https://chaster.app/developers/applications)
-- A way to expose the backend to Internet to receive Chaster webhooks (e.g. Cloudflare tunnel, ngrok...)
+- Cloudflare (easiest way to host it https://cloudflare.com)
 
 ## 🌟 Run
 
@@ -35,14 +35,29 @@ docker compose up -d
 
 ## ❓ How to use
 
+### Cloudflare
+
+I recommend to use Cloudflare, its really easy and powerful, you'll need a Cloudflare token to be able to generate an SSL certificate (HTTPS)
+
+Go to [API Tokens Page](https://dash.cloudflare.com/profile/api-tokens), generate a new API Tokens with these permissions
+
+```md
+Zone / DNS / Edit
+Zone / Zone / Read
+```
+
+### Common
+
 1. Copy .env.example as .env and fill it.
 2. Run using Docker `docker compose up -d`
 3. Create a Chaster extension with these URLs.
-```
+
+```md
 Main page URL: <frontend-url>/extension/main
 Configuration page URL: <frontend-url>/extension/configuration
 Webhook URL: <backend-url>/api/webhooks/extensions/chaster
 ```
+
 4. Create a Lock or Self-Lock with this extension.
 5. Go to the extension in the lock settings page.
 6. Link Chaster and Puryfi.
@@ -51,7 +66,7 @@ Webhook URL: <backend-url>/api/webhooks/extensions/chaster
 ## 🤝 How to Contribute / Contact Us
 
 I've made a discord server to centralize information, suggestions, bugs and more.
-You can join it [here](https://discord.gg/vD8zyyMXne)
+You can join it [Join our discord here](https://discord.gg/vD8zyyMXne)
 
 * 🌍 [Website](https://paa.ge/sereti)
 * ✉️ [Email](mailto:httxsereti@gmail.com)
