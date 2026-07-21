@@ -41,7 +41,6 @@ export default function LinkPuryfiCard({ session }: { session: ChasterExtensionS
             </Button>
             {modalOpen && (
                 <LinkTokenModal
-                    sessionId={session.id}
                     linkToken={linkToken}
                     onClose={() => setModalOpen(false)}
                     onTokenCreated={(token) => setLinkToken(token)}

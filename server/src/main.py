@@ -8,12 +8,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import init_db, close_db
 from routes import websocket, webhooks, extensions, configuration
+from utils.chaster_api import close_chaster_client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
     await close_db()
+    await close_chaster_client()
 
 app = FastAPI(lifespan=lifespan)
 

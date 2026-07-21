@@ -25,7 +25,7 @@ async def link_with_token(link_token: str) -> bool:
 
         # Post a custom log entry to the Chaster lock session
         if session_id:
-            create_custom_log(
+            await create_custom_log(
                 session_id=session_id,
                 role="user",
                 title="%USER% linked Puryfi",

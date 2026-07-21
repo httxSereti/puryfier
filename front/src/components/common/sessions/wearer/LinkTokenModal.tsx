@@ -3,13 +3,12 @@ import { Copy, Check, Key, Loader2, X } from "lucide-react";
 import axios from "axios";
 
 interface LinkTokenModalProps {
-    sessionId: string;
     linkToken: string | null;
     onClose: () => void;
     onTokenCreated: (token: string) => void;
 }
 
-export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenCreated }: LinkTokenModalProps) {
+export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: LinkTokenModalProps) {
     const [token, setToken] = useState<string | null>(linkToken);
     const [copied, setCopied] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
@@ -26,8 +25,16 @@ export default function LinkTokenModal({ sessionId, linkToken, onClose, onTokenC
         setIsCreating(true);
         setError(null);
         try {
+            // The link-token endpoint authenticates with the Chaster-issued
+            // mainToken from the iframe URL (REVIEW.md #8).
+            const hash = window.location.hash.substring(1);
+            const params = JSON.parse(decodeURIComponent(hash));
+            if (!params.mainToken) {
+                throw new Error("mainToken not found in parameters.");
+            }
+
             const backendUrl = import.meta.env.VITE_BACKEND_URL;
-            const response = await axios.post(`${backendUrl}/api/session/${sessionId}/link-token`);
+            const response = await axios.post(`${backendUrl}/api/session/${params.mainToken}/link-token`);
             const newToken: string = response.data.link_token;
             setToken(newToken);
             onTokenCreated(newToken);

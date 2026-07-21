@@ -1,22 +1,15 @@
-import os
-import requests
+import httpx
 
-developer_token = os.getenv("CHASTER_DEVELOPER_TOKEN", "")
+from utils import chaster_api
 
-def add_time_to_lock(session_id: str, duration: int) -> bool:
+
+async def add_time_to_lock(session_id: str, duration: int) -> bool:
     """
         Add duration to a Chaster Lock using session id
     """
-    headers = {
-        "accept": "application/json",
-        "Authorization": f"Bearer {developer_token}",
-        "Content-Type": "application/json",
-    }
-
     try:
-        data = requests.post(
-            url=f"https://api.chaster.app/api/extensions/sessions/{session_id}/action",
-            headers=headers,
+        response = await chaster_api.chaster_client.post(
+            f"/api/extensions/sessions/{session_id}/action",
             json={
                 "action": {
                     "name": "add_time",
@@ -24,12 +17,7 @@ def add_time_to_lock(session_id: str, duration: int) -> bool:
                 }
             },
         )
-        data.raise_for_status()
-        
-        if data.status_code == 201:
-            return True
-        else:
-            return False
-    except Exception as e:
+        return response.status_code == 201
+    except httpx.HTTPError as e:
         print(f"Error adding duration: {e}")
         return False
