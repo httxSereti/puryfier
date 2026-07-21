@@ -106,7 +106,6 @@ async def create_link_token(session_id: str):
         role="",  # role not stored on the config row
         has_linked_plugin=lock_config.has_linked_plugin,
         link_token=lock_config.link_token,
-        lock_on_freeze=lock_config.config.lock_on_freeze,
-        unlock_on_unfreeze=lock_config.config.unlock_on_unfreeze,
-        lock_password=lock_config.lock_password,
+        # lock_password deliberately omitted: this endpoint cannot role-gate
+        # it, and the wearer must never receive the cleartext password.
     )
