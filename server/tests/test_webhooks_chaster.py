@@ -1,0 +1,182 @@
+"""E2E tests for POST /api/webhooks/extensions/chaster.
+
+Covers webhook authentication, defensive payload parsing (400s), and
+requestId deduplication (Chaster retries must be no-ops).
+"""
+
+from conftest import WEBHOOK_AUTH
+
+WEBHOOK_URL = "/api/webhooks/extensions/chaster"
+
+
+def make_payload(
+    request_id: str = "req-1",
+    event: str = "action_log.created",
+    action_type: str = "some_unhandled_action",
+    session_id: str | None = None,
+) -> dict:
+    data: dict = {"actionLog": {"type": action_type}}
+    if session_id is not None:
+        data["sessionId"] = session_id
+    return {"event": event, "requestId": request_id, "data": data}
+
+
+class TestAuthentication:
+    def test_missing_credentials_returns_401(self, client):
+        response = client.post(WEBHOOK_URL, json=make_payload())
+        assert response.status_code == 401
+
+    def test_wrong_credentials_returns_401(self, client):
+        response = client.post(WEBHOOK_URL, json=make_payload(), auth=("nope", "nope"))
+        assert response.status_code == 401
+
+    def test_valid_credentials_accepted(self, client):
+        response = client.post(WEBHOOK_URL, json=make_payload(), auth=WEBHOOK_AUTH)
+        assert response.status_code == 200
+
+
+class TestDefensiveParsing:
+    def test_invalid_json_returns_400(self, client):
+        response = client.post(
+            WEBHOOK_URL,
+            content="{not json",
+            headers={"Content-Type": "application/json"},
+            auth=WEBHOOK_AUTH,
+        )
+        assert response.status_code == 400
+
+    def test_non_object_json_returns_400(self, client):
+        response = client.post(WEBHOOK_URL, json=["event"], auth=WEBHOOK_AUTH)
+        assert response.status_code == 400
+
+    def test_missing_event_returns_400(self, client):
+        response = client.post(WEBHOOK_URL, json={"requestId": "req-1"}, auth=WEBHOOK_AUTH)
+        assert response.status_code == 400
+
+    def test_missing_request_id_returns_400(self, client):
+        response = client.post(
+            WEBHOOK_URL, json={"event": "action_log.created"}, auth=WEBHOOK_AUTH
+        )
+        assert response.status_code == 400
+
+    def test_missing_action_log_returns_400(self, client):
+        response = client.post(
+            WEBHOOK_URL,
+            json={"event": "action_log.created", "requestId": "req-1"},
+            auth=WEBHOOK_AUTH,
+        )
+        assert response.status_code == 400
+
+    def test_null_data_returns_400(self, client):
+        response = client.post(
+            WEBHOOK_URL,
+            json={"event": "action_log.created", "requestId": "req-1", "data": None},
+            auth=WEBHOOK_AUTH,
+        )
+        assert response.status_code == 400
+
+    def test_missing_action_type_returns_400(self, client):
+        response = client.post(
+            WEBHOOK_URL,
+            json={
+                "event": "action_log.created",
+                "requestId": "req-1",
+                "data": {"actionLog": {}},
+            },
+            auth=WEBHOOK_AUTH,
+        )
+        assert response.status_code == 400
+
+
+class TestDeduplication:
+    def test_retry_of_processed_webhook_is_noop(self, client, mongo_db):
+        payload = make_payload(request_id="req-dup-1")
+
+        first = client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH)
+        assert first.status_code == 200
+        assert first.json() == {"status": "ok"}
+        assert (
+            mongo_db["processed_webhook_events"].count_documents(
+                {"request_id": "req-dup-1"}
+            )
+            == 1
+        )
+
+        retry = client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH)
+        assert retry.status_code == 200
+        assert retry.json() == {"status": "ok", "action": "duplicate_ignored"}
+
+    def test_unknown_event_is_processed_once(self, client):
+        payload = make_payload(request_id="req-dup-2", event="session.created")
+
+        assert client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH).json() == {
+            "status": "ok"
+        }
+        assert client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH).json() == {
+            "status": "ok",
+            "action": "duplicate_ignored",
+        }
+
+    def test_retried_lock_frozen_does_not_regenerate_password_or_requeue(
+        self, client, mongo_db, seed_lock_configuration
+    ):
+        """Regression test: a retried lock_frozen used to generate a new
+        password and re-queue the setState messages."""
+        seed_lock_configuration(session_id="session-1", link_token="token-1")
+        payload = make_payload(
+            request_id="req-freeze-1", action_type="lock_frozen", session_id="session-1"
+        )
+
+        first = client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH)
+        assert first.status_code == 200
+        assert first.json()["action"] == "lock_frozen_queued_no_connection"
+
+        config = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": "session-1"}
+        )
+        assert config["lock_password"]  # generated by the handler
+        assert mongo_db["queued_messages"].count_documents({"link_token": "token-1"}) == 2
+
+        retry = client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH)
+        assert retry.status_code == 200
+        assert retry.json()["action"] == "duplicate_ignored"
+
+        config_after = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": "session-1"}
+        )
+        assert config_after["lock_password"] == config["lock_password"]
+        assert mongo_db["queued_messages"].count_documents({"link_token": "token-1"}) == 2
+
+
+class TestClaimRelease:
+    def test_failed_processing_releases_claim_so_retry_can_reprocess(
+        self, client, mongo_db, monkeypatch
+    ):
+        """If handling blows up (500), the dedup claim must be removed;
+        otherwise Chaster's retry would be swallowed as a duplicate."""
+        import routes.webhooks.chaster as chaster_module
+
+        async def boom(_data):
+            raise RuntimeError("transient failure")
+
+        payload = make_payload(
+            request_id="req-fail-1", action_type="lock_frozen", session_id="session-x"
+        )
+
+        # monkeypatch.context() undoes only this patch on exit, leaving the
+        # client fixture's env patches (webhook credentials) intact.
+        with monkeypatch.context() as m:
+            m.setattr(chaster_module, "handle_lock_frozen", boom)
+            response = client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH)
+            assert response.status_code == 500
+            assert (
+                mongo_db["processed_webhook_events"].count_documents(
+                    {"request_id": "req-fail-1"}
+                )
+                == 0
+            )
+
+        retry = client.post(WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH)
+        assert retry.status_code == 200
+        # No configuration seeded for session-x: handled and ignored, not duplicated.
+        assert retry.json()["action"] == "lock_frozen_ignored_no_config"

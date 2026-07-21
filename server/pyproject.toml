@@ -20,3 +20,15 @@ dependencies = [
 [tool.pyright]
 include = ["src"]
 extraPaths = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+filterwarnings = ["ignore::DeprecationWarning:mongomock.*"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mongomock>=4.3.0",
+    "pytest>=9.1.1",
+]
