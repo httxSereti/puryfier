@@ -1,15 +1,12 @@
 from fastapi import APIRouter
-from models.connection_manager import manager
 from models.documents import ProcessedWebhookEvent
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import JSONResponse
 from fastapi import status, Depends, HTTPException, Request
 from pymongo.errors import DuplicateKeyError
 from .actions import handle_lock_frozen, handle_lock_unfrozen, handle_extension_updated
 import json
 import os
 import secrets
-from pprint import pprint
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhook"])
 security = HTTPBasic()
@@ -39,7 +36,6 @@ async def chaster_webhook(request: Request, _: str = Depends(verify_credentials)
     """
     Chaster webhook endpoint
     """
-    print("----- PAYLOAD -----")
     try:
         data = await request.json()
     except json.JSONDecodeError:
@@ -47,7 +43,6 @@ async def chaster_webhook(request: Request, _: str = Depends(verify_credentials)
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Request body is not valid JSON",
         )
-    pprint(data)
 
     if not isinstance(data, dict):
         raise HTTPException(
@@ -64,22 +59,20 @@ async def chaster_webhook(request: Request, _: str = Depends(verify_credentials)
             detail="Missing required keys: 'event' and 'requestId'",
         )
 
-    print(f"event '{event}'")
-    print(f"requestId '{request_id}'")
-    print("-------------")
-
     if event == "action_log.created":
         event_data = data.get("data")
-        action_payload = event_data.get("actionLog") if isinstance(event_data, dict) else None
-        action_type = action_payload.get("type") if isinstance(action_payload, dict) else None
+        action_payload = (
+            event_data.get("actionLog") if isinstance(event_data, dict) else None
+        )
+        action_type = (
+            action_payload.get("type") if isinstance(action_payload, dict) else None
+        )
 
         if not action_type:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Missing required key: 'data.actionLog.type'",
             )
-
-        print(f"actionType '{action_type}'")
 
     # Claim the requestId so that Chaster retries of an already-processed
     # webhook become no-ops (the unique index makes the first insert win).
