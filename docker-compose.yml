@@ -55,7 +55,7 @@ services:
     environment:
       - VITE_BACKEND_URL=${BACKEND_URL:-https://api.example.com}
       - VITE_PURYFI_WS_URL=${WEBSOCKET_URL:-wss://api.example.com}
-      - VITE_APP_VERSION="0.2.1"
+      - VITE_APP_VERSION=${APP_VERSION:-0.2.1}
     labels:
       - traefik.enable=true
       - traefik.docker.network=puryfier_proxy
@@ -72,6 +72,9 @@ services:
       dockerfile: Dockerfile
     container_name: puryfier-server
     restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
     environment:
       - CHASTER_DEVELOPER_TOKEN=${CHASTER_DEVELOPER_TOKEN}
       - CHASTER_WEBHOOK_USER=${CHASTER_WEBHOOK_USER}

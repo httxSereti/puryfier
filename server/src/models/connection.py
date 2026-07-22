@@ -23,6 +23,19 @@ intents = [
     "readMediaProcesses" # read media processes
 ]
 
+# Labels that make a scanned media count as "censored" for the
+# "add time when a media is censored" feature (REVIEW.md #11).
+# Faces, hands, feet, eyes, ... are detected by Puryfi but are not
+# censorable content, so they must not count.
+CENSORABLE_LABELS = {
+    PuryfiObjectLabel.Buttocks,
+    PuryfiObjectLabel.FemaleBreast,
+    PuryfiObjectLabel.FemaleGenitals,
+    PuryfiObjectLabel.MaleGenitals,
+    PuryfiObjectLabel.Anus,
+    PuryfiObjectLabel.Nipple,
+}
+
 class Connection:
     def __init__(self, websocket: WebSocket, user_lock_config: UserLockConfiguration):
         self.websocket = websocket
@@ -110,13 +123,20 @@ class Connection:
             
         elif msg_type == "staticMediaScan":
             objects = payload.get("objects", [])
-            
-            if len(objects) > 0 and self.user_lock_config.config.censorPicsConfig.enabled:
+
+            # One scan message == one scanned image. The feature counts
+            # censored *images*, so a scan counts once, and only if it
+            # contains at least one censorable label (REVIEW.md #11).
+            has_censorable_content = any(
+                obj.get("label") in CENSORABLE_LABELS for obj in objects
+            )
+
+            if has_censorable_content and self.user_lock_config.config.censorPicsConfig.enabled:
                 self.seen_censored_objects += 1
 
                 if self.seen_censored_objects >= self.user_lock_config.config.censorPicsConfig.limit_count:
                     self.seen_censored_objects = 0
-                    
+
                     if self.user_lock_config.session_id:
                         success = await add_time_to_lock(self.user_lock_config.session_id, self.user_lock_config.config.censorPicsConfig.added_duration)
                         if success:
@@ -128,10 +148,6 @@ class Connection:
                                 icon="clock",
                                 color="#ffffff"
                             )
-
-                # for item in objects:
-                #     label = PuryfiObjectLabel.get_name(item.get("label", ""))
-                #     print(f"[Static Media Scan] Detected:{label}")
 
         if response_id is not None and response is not None:
             await self.send_response(response_id, response)

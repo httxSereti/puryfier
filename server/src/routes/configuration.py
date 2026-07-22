@@ -1,16 +1,12 @@
 from models.connection_manager import manager
 import httpx
-from cuid2 import cuid_wrapper
 from fastapi import APIRouter, HTTPException
 from typings.chaster import PartnerConfigurationForPublic
 from models.documents.user_lock_configuration import UserLockConfiguration
-from schemas import ChasterExtensionConfigurationSchema, ChasterExtensionConfigSchema
+from schemas import ChasterExtensionConfigurationSchema
 from utils import chaster_api
-from pprint import pprint
 
 router = APIRouter(prefix="/api/configuration", tags=["configuration"])
-
-cuid = cuid_wrapper()
 
 @router.get("/{configuration_token}", response_model=ChasterExtensionConfigurationSchema)
 async def configuration(configuration_token: str):
@@ -98,8 +94,7 @@ async def update_configuration(configuration_token: str, payload: dict):
 
         data = response.json()
         session_id = data.get("sessionId")
-        pprint(data)
-        print(f"[config-put] payload received: {payload}")
+        # Not logging the full Chaster response: it contains user data (REVIEW.md #13).
         print(f"[config-put] session_id from chaster: {session_id}")
 
         if session_id:
@@ -112,7 +107,7 @@ async def update_configuration(configuration_token: str, payload: dict):
                 lock_config.config = data.get("config")
                 await lock_config.save()
 
-                manager.send_config_update(lock_config.link_token or "", lock_config.config)
+                manager.update_cached_config(lock_config.link_token or "", lock_config.config)
                 print(f"[DB] Updated UserLockConfiguration for session {session_id!r}")
             else:
                 print(f"[config-put] NO lock_config found for session_id: {session_id}")

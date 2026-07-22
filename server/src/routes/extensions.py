@@ -1,11 +1,10 @@
 from models.connection_manager import manager
 from cuid2 import cuid_wrapper
 from fastapi import APIRouter, HTTPException
-from typings.chaster import PartnerGetSessionAuthRepDto, PartnerConfigurationForPublic
+from typings.chaster import PartnerGetSessionAuthRepDto
 from models.documents.user_lock_configuration import UserLockConfiguration
-from schemas import ChasterExtensionSessionSchema, ChasterExtensionConfigurationSchema, ChasterExtensionConfigSchema
+from schemas import ChasterExtensionSessionSchema, ChasterExtensionConfigSchema
 from utils.chaster_api import get_session_auth
-from pprint import pprint
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -21,7 +20,7 @@ async def fetch_session(main_token: str):
     data: PartnerGetSessionAuthRepDto | None = None
 
     data = await get_session_auth(main_token)
-    pprint(data)
+    # Not logging the payload: it contains user objects and config (REVIEW.md #13).
 
     # Fetch or create a UserLockConfiguration for this Chaster session
     session_id: str = data.get("session", {}).get("sessionId", "")

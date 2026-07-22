@@ -1,19 +1,49 @@
-import { EyeOff, Eye, Check, Copy } from "lucide-react";
+import { EyeOff, Eye, Check, Copy, AlertTriangle } from "lucide-react";
 import { useState } from "react"
+
+/**
+ * navigator.clipboard.writeText is blocked inside the Chaster iframe
+ * (missing allow="clipboard-write", which we don't control) — REVIEW.md #22.
+ * Fall back to a hidden textarea + execCommand, and report honestly.
+ */
+async function copyText(text: string): Promise<boolean> {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        // Fall through to the legacy path.
+    }
+
+    try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        return ok;
+    } catch {
+        return false;
+    }
+}
 
 export default function ShowPuryfiPassword({ puryfiPassword }: { puryfiPassword: string }) {
     const [showPassword, setShowPassword] = useState(false)
     const [copied, setCopied] = useState(false)
+    const [copyFailed, setCopyFailed] = useState(false)
 
-
-    const handleCopyPassword = () => {
-        try {
-            // #TODO: fix, it throws a NotAllowedError: Failed to execute 'writeText'
-            navigator.clipboard.writeText(puryfiPassword);
+    const handleCopyPassword = async () => {
+        setCopyFailed(false);
+        const ok = await copyText(puryfiPassword);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error("Failed to copy password:", error);
+        } else {
+            setCopyFailed(true);
+            setTimeout(() => setCopyFailed(false), 3000);
         }
     };
 
@@ -35,17 +65,25 @@ export default function ShowPuryfiPassword({ puryfiPassword }: { puryfiPassword:
                 </button>
             </div>
             {showPassword && (
-                <div className="flex justify-between items-center bg-black/60 p-3 rounded-lg border border-slate-800">
-                    <span className="text-sm font-mono font-bold text-cyan-400 tracking-widest">
-                        {puryfiPassword}
-                    </span>
-                    <button
-                        onClick={handleCopyPassword}
-                        className="text-slate-400 hover:text-emerald-400 transition-all p-2 bg-slate-800 rounded-md hover:bg-slate-700"
-                        title="Copy password"
-                    >
-                        {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
-                    </button>
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center bg-black/60 p-3 rounded-lg border border-slate-800">
+                        <span className="text-sm font-mono font-bold text-cyan-400 tracking-widest select-all">
+                            {puryfiPassword}
+                        </span>
+                        <button
+                            onClick={handleCopyPassword}
+                            className="text-slate-400 hover:text-emerald-400 transition-all p-2 bg-slate-800 rounded-md hover:bg-slate-700"
+                            title="Copy password"
+                        >
+                            {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                        </button>
+                    </div>
+                    {copyFailed && (
+                        <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                            <AlertTriangle size={12} />
+                            Copy blocked by the browser — long-press the password to copy it manually.
+                        </p>
+                    )}
                 </div>
             )}
         </div>

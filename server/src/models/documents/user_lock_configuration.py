@@ -28,6 +28,10 @@ class UserLockConfiguration(Document):
     puryfi_username: str | None = None
 
     # Configurations
+    # Conscious decision (REVIEW.md #13): lock_password is stored in cleartext
+    # because it must be retrievable to send to the Puryfi client on
+    # freeze/unfreeze. This is a shared secret for a self-hosted local app;
+    # it is never logged and only ever returned to the keyholder role.
     lock_password: str | None = None
     config: ChasterExtensionConfigSchema
 

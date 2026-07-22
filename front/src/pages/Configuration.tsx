@@ -53,7 +53,6 @@ export default function Configuration() {
         const backendUrl = import.meta.env.VITE_BACKEND_URL;
         const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
         setConfigurationData(response.data);
-        console.log(response.data)
         configRef.current = response.data;
       } catch (err: any) {
         if (axios.isAxiosError(err)) {
