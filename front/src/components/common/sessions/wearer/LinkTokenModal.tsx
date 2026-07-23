@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Check, Key, Loader2, X } from "lucide-react";
 import axios from "axios";
+import { copyText } from "@/lib/clipboard";
 
 interface LinkTokenModalProps {
     linkToken: string | null;
@@ -11,14 +12,21 @@ interface LinkTokenModalProps {
 export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: LinkTokenModalProps) {
     const [token, setToken] = useState<string | null>(linkToken);
     const [copied, setCopied] = useState(false);
+    const [copyFailed, setCopyFailed] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleCopy = async () => {
         if (!token) return;
-        await navigator.clipboard.writeText(`${import.meta.env.VITE_PURYFI_WS_URL}/${token}`);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        setCopyFailed(false);
+        const ok = await copyText(`${import.meta.env.VITE_PURYFI_WS_URL}/${token}`);
+        if (ok) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } else {
+            setCopyFailed(true);
+            setTimeout(() => setCopyFailed(false), 3000);
+        }
     };
 
     const handleCreate = async () => {
@@ -80,13 +88,19 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
                             onClick={handleCopy}
                             className="group w-full flex items-center justify-between gap-3 bg-slate-950 border border-slate-700 hover:border-cyan-700 rounded-xl px-4 py-3 transition-colors"
                         >
-                            <div className="text-sm font-mono text-cyan-300 truncate">{import.meta.env.VITE_PURYFI_WS_URL}/{token}</div>
+                            <div className="text-sm font-mono text-cyan-300 truncate select-all">{import.meta.env.VITE_PURYFI_WS_URL}/{token}</div>
                             {copied
                                 ? <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                                 : <Copy className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 shrink-0 transition-colors" />
                             }
                         </button>
-                        <p className="text-xs text-slate-500 text-center">Click the box to copy</p>
+                        {copyFailed ? (
+                            <p className="text-xs text-amber-400 text-center">
+                                Copy blocked by the browser — select the URL and copy it manually.
+                            </p>
+                        ) : (
+                            <p className="text-xs text-slate-500 text-center">Click the box to copy</p>
+                        )}
                     </div>
                 ) : (
                     <div className="space-y-3">

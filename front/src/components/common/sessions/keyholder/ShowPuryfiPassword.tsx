@@ -1,34 +1,6 @@
 import { EyeOff, Eye, Check, Copy, AlertTriangle } from "lucide-react";
 import { useState } from "react"
-
-/**
- * navigator.clipboard.writeText is blocked inside the Chaster iframe
- * (missing allow="clipboard-write", which we don't control) — REVIEW.md #22.
- * Fall back to a hidden textarea + execCommand, and report honestly.
- */
-async function copyText(text: string): Promise<boolean> {
-    try {
-        await navigator.clipboard.writeText(text);
-        return true;
-    } catch {
-        // Fall through to the legacy path.
-    }
-
-    try {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        return ok;
-    } catch {
-        return false;
-    }
-}
+import { copyText } from "@/lib/clipboard";
 
 export default function ShowPuryfiPassword({ puryfiPassword }: { puryfiPassword: string }) {
     const [showPassword, setShowPassword] = useState(false)
