@@ -5,10 +5,12 @@ import type { ChasterExtensionConfigurationSchema } from "@/types/chaster";
 import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
 import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
 
+const CHASTER_ORIGIN = "https://chaster.app";
+
 function postToParent(event: string, payload?: object) {
   window.parent.postMessage(
     JSON.stringify({ type: "partner_configuration", event, ...(payload ? { payload } : {}) }),
-    "*"
+    CHASTER_ORIGIN
   );
 }
 
@@ -51,7 +53,6 @@ export default function Configuration() {
         const backendUrl = import.meta.env.VITE_BACKEND_URL;
         const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
         setConfigurationData(response.data);
-        console.log(response.data)
         configRef.current = response.data;
       } catch (err: any) {
         if (axios.isAxiosError(err)) {
@@ -69,7 +70,8 @@ export default function Configuration() {
 
   useEffect(() => {
     const handleMessage = async (e: MessageEvent) => {
-      if (typeof e.data !== "string") return;
+      // Only act on messages from the Chaster host page (REVIEW.md #7)
+      if (e.origin !== CHASTER_ORIGIN || typeof e.data !== "string") return;
 
       let parsed: { type?: string; event?: string };
       try {

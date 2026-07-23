@@ -7,8 +7,8 @@ async def handle_lock_frozen(payload: dict) -> dict:
     """
     Handle the 'lock_frozen' event action from Chaster.
     """   
-    session_id = payload['data']['sessionId']
-    
+    session_id = payload.get('data', {}).get('sessionId')
+
     if not session_id:
         print("[lock_frozen] Error: Could not find sessionId in payload.")
         return {"status": "ok", "action": "lock_frozen_ignored_no_session"}
@@ -57,5 +57,3 @@ async def handle_lock_frozen(payload: dict) -> dict:
             }
         })
         return {"status": "ok", "action": "lock_frozen_queued_no_connection"}
-
-    return {"status": "ok", "action": "lock_frozen_processed"}

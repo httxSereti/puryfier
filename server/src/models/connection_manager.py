@@ -26,9 +26,12 @@ class ConnectionManager:
     def get_by_user_link_token(self, user_link_token: str) -> Connection | None:
         return self._connections.get(user_link_token)
 
-    def send_config_update(self, user_link_token: str, config: ChasterExtensionConfigSchema) -> None:
+    def update_cached_config(self, user_link_token: str, config: ChasterExtensionConfigSchema) -> None:
+        """Update the in-memory config of a live connection (REVIEW.md #17:
+        this does not push anything to the Puryfi client — it only refreshes
+        what the server-side handlers see for this connection)."""
         connection = self.get_by_user_link_token(user_link_token)
         if connection:
-            connection.user_lock_config.config = config   
+            connection.user_lock_config.config = config
 
 manager = ConnectionManager()

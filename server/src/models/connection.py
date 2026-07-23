@@ -6,7 +6,7 @@ import msgpack
 from fastapi import WebSocket
 from services.chaster import add_time_to_lock
 
-from services.queue import fetch_and_delete_queued_messages
+from services.queue import fetch_queued_messages, queue_message
 
 manifest = {
     "name": "Puryfier",
@@ -23,6 +23,19 @@ intents = [
     "readMediaProcesses" # read media processes
 ]
 
+# Labels that make a scanned media count as "censored" for the
+# "add time when a media is censored" feature (REVIEW.md #11).
+# Faces, hands, feet, eyes, ... are detected by Puryfi but are not
+# censorable content, so they must not count.
+CENSORABLE_LABELS = {
+    PuryfiObjectLabel.Buttocks,
+    PuryfiObjectLabel.FemaleBreast,
+    PuryfiObjectLabel.FemaleGenitals,
+    PuryfiObjectLabel.MaleGenitals,
+    PuryfiObjectLabel.Anus,
+    PuryfiObjectLabel.Nipple,
+}
+
 class Connection:
     def __init__(self, websocket: WebSocket, user_lock_config: UserLockConfiguration):
         self.websocket = websocket
@@ -38,13 +51,17 @@ class Connection:
 
         self.intents_granted_event = asyncio.Event()
 
+    # Seconds to wait for a Puryfi client response before failing the RPC
+    # (REVIEW.md #5: an unanswered RPC must not hang forever).
+    RPC_TIMEOUT_SECONDS = 15.0
+
     async def send_message(self, msg_type: str, payload: dict) -> dict:
         response_id = self.next_response_id
         self.next_response_id += 1
-        
+
         future = asyncio.get_event_loop().create_future()
         self.pending_requests[response_id] = future
-        
+
         message = {
             "type": msg_type,
             "payload": payload,
@@ -52,8 +69,18 @@ class Connection:
         }
         encoded = msgpack.packb(message)
         await self.websocket.send_bytes(encoded)
-        
-        return await future
+
+        try:
+            return await asyncio.wait_for(future, timeout=self.RPC_TIMEOUT_SECONDS)
+        finally:
+            self.pending_requests.pop(response_id, None)
+
+    def fail_pending(self, reason: str) -> None:
+        """Fail all outstanding RPC futures, e.g. when the connection drops."""
+        for future in self.pending_requests.values():
+            if not future.done():
+                future.set_exception(ConnectionError(reason))
+        self.pending_requests.clear()
 
     async def send_response(self, response_id: int, payload: dict):
         message = {
@@ -96,17 +123,24 @@ class Connection:
             
         elif msg_type == "staticMediaScan":
             objects = payload.get("objects", [])
-            
-            if len(objects) > 0 and self.user_lock_config.config.censorPicsConfig.enabled:
+
+            # One scan message == one scanned image. The feature counts
+            # censored *images*, so a scan counts once, and only if it
+            # contains at least one censorable label (REVIEW.md #11).
+            has_censorable_content = any(
+                obj.get("label") in CENSORABLE_LABELS for obj in objects
+            )
+
+            if has_censorable_content and self.user_lock_config.config.censorPicsConfig.enabled:
                 self.seen_censored_objects += 1
 
                 if self.seen_censored_objects >= self.user_lock_config.config.censorPicsConfig.limit_count:
                     self.seen_censored_objects = 0
-                    
+
                     if self.user_lock_config.session_id:
-                        success = add_time_to_lock(self.user_lock_config.session_id, self.user_lock_config.config.censorPicsConfig.added_duration)
+                        success = await add_time_to_lock(self.user_lock_config.session_id, self.user_lock_config.config.censorPicsConfig.added_duration)
                         if success:
-                            create_custom_log(
+                            await create_custom_log(
                                 self.user_lock_config.session_id,
                                 role="extension",
                                 title="%USER% added time!",
@@ -114,10 +148,6 @@ class Connection:
                                 icon="clock",
                                 color="#ffffff"
                             )
-
-                # for item in objects:
-                #     label = PuryfiObjectLabel.get_name(item.get("label", ""))
-                #     print(f"[Static Media Scan] Detected:{label}")
 
         if response_id is not None and response is not None:
             await self.send_response(response_id, response)
@@ -148,7 +178,9 @@ class Connection:
                 
             # 4. Request Intents
             granted_intents = res.get("intents", [])
-            if not all(intent in granted_intents for intent in intents):
+            if all(intent in granted_intents for intent in intents):
+                self.intents_granted_event.set()
+            else:
                 res = await self.send_message("requestPluginIntents", {"intents": intents})
                 if res.get("type", "") == "error":
                     print(f"Failed to request plugin intents: {res.get('message')}")
@@ -170,32 +202,41 @@ class Connection:
 
     async def process_queued_messages(self, user_link_token: str) -> None:
         """
-            Process queued messages for the connection
-        """
-        
-        from services.link import link_with_token
-        
-        if await link_with_token(user_link_token):
-            queued_messages = await fetch_and_delete_queued_messages(user_link_token)
-            
-            """
-                Send queued messages to Puryfi plugin
-                Handle errors and requeue if necessary
-            """
-            async def process_queue_msg(msg_type, payload):
-                res = await self.send_message(msg_type, payload)
-                if isinstance(res, dict) and res.get("type") == "error":
-                    error_name = res.get("name")
-                    error_msg = res.get("message")
-                    print(f"[Queue Error] Failed to send '{msg_type}': {error_name} - {error_msg}")
-                    
-                    if error_name == "missingPluginIntents":
-                        print("[Queue] Requeuing message due to missing intents")
-                        from services.queue import queue_message
-                        await queue_message(user_link_token, msg_type, payload)
-                        # Optionally request intents again
-                        await self.send_message("requestPluginIntents", {"intents": intents})
+            Process queued messages for the connection.
 
-            for msg in queued_messages:
-                print(f"[Queue] Sending queued message: {msg['msg_type']}")
-                asyncio.create_task(process_queue_msg(msg["msg_type"], msg["payload"]))
+            REVIEW.md #9: drain sequentially (ordering is semantic for a
+            lock/unlock protocol), delete each message only after a successful
+            send, and start draining only after intents are granted.
+        """
+
+        from services.link import link_with_token
+
+        if not await link_with_token(user_link_token):
+            return
+
+        # Queued messages (setState, enterLockPassword, ...) require intents;
+        # wait until they are granted before draining.
+        await self.intents_granted_event.wait()
+
+        queued_messages = await fetch_queued_messages(user_link_token)
+
+        for msg in queued_messages:
+            print(f"[Queue] Sending queued message: {msg.msg_type}")
+            res = await self.send_message(msg.msg_type, msg.payload)
+
+            if isinstance(res, dict) and res.get("type") == "error":
+                error_name = res.get("name")
+                error_msg = res.get("message")
+                print(f"[Queue Error] Failed to send '{msg.msg_type}': {error_name} - {error_msg}")
+
+                if error_name == "missingPluginIntents":
+                    # Keep the message queued for the next drain and re-request intents.
+                    await self.send_message("requestPluginIntents", {"intents": intents})
+                    return
+
+                # Other errors: stop draining and keep this and the remaining
+                # messages queued rather than dropping them out of order.
+                return
+
+            # Delivered: only now is it safe to remove it from the queue.
+            await msg.delete()

@@ -1,3 +1,5 @@
+import type { ChasterExtensionConfigSchema } from "@/types/chaster";
+
 export interface ChasterExtensionSessionSchema {
     id: string;
     role: string;
@@ -6,15 +8,6 @@ export interface ChasterExtensionSessionSchema {
     is_online: boolean;
     link_token: string | null;
 
-    config: {
-        lock_on_freeze: boolean;
-        unlock_on_unfreeze: boolean;
-        censorPicsConfig: {
-            enabled: boolean;
-            limit_count: number;
-            added_duration: number;
-        };
-
-    };
+    config: ChasterExtensionConfigSchema | null;
     lock_password: string | null;
 }

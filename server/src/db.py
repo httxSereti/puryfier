@@ -1,10 +1,22 @@
 import os
 from beanie import init_beanie
 from pymongo import AsyncMongoClient
-from models.documents import User, UserLockConfiguration, QueuedMessage, ProcessedWebhookEvent
+from pymongo.uri_parser import parse_uri
+from models.documents import UserLockConfiguration, QueuedMessage, ProcessedWebhookEvent
 
 
 _client: AsyncMongoClient | None = None
+
+DEFAULT_DB_NAME = "puryfi_chaster"
+
+
+def _resolve_db_name(url: str) -> str:
+    """Database name: explicit env var wins, otherwise parse the URI properly
+    (REVIEW.md #19 — no string hacking on the connection string)."""
+    explicit = os.getenv("DATABASE_NAME", "")
+    if explicit:
+        return explicit
+    return parse_uri(url)["database"] or DEFAULT_DB_NAME
 
 
 async def init_db() -> None:
@@ -13,18 +25,17 @@ async def init_db() -> None:
 
     url = os.getenv(
         "DATABASE_URL",
-        "mongodb://puryfi:puryfi@localhost:27017/puryfi_chaster?authSource=admin",
+        f"mongodb://puryfi:puryfi@localhost:27017/{DEFAULT_DB_NAME}?authSource=admin",
     )
 
     _client = AsyncMongoClient(url)
 
-    # Extract the database name from the connection string
-    db_name = url.rsplit("/", 1)[-1].split("?")[0] or "puryfi_chaster"
+    db_name = _resolve_db_name(url)
     print(f"[DB] Connecting to MongoDB: {db_name}")
 
     await init_beanie(
         database=_client[db_name],
-        document_models=[User, UserLockConfiguration, QueuedMessage, ProcessedWebhookEvent],
+        document_models=[UserLockConfiguration, QueuedMessage, ProcessedWebhookEvent],
     )
     print("[DB] Beanie initialised ✓")
 

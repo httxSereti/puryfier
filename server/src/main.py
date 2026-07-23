@@ -8,18 +8,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import init_db, close_db
 from routes import websocket, webhooks, extensions, configuration
+from utils.chaster_api import close_chaster_client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
     await close_db()
+    await close_chaster_client()
 
 app = FastAPI(lifespan=lifespan)
 
+# Allowlist the known frontend origin only; "*" with credentials is invalid
+# per the CORS spec (REVIEW.md #14).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[os.getenv("FRONT_URL", "http://localhost:5173")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

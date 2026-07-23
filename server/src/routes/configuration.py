@@ -1,41 +1,31 @@
 from models.connection_manager import manager
-import os
-import requests
-from cuid2 import cuid_wrapper
+import httpx
 from fastapi import APIRouter, HTTPException
 from typings.chaster import PartnerConfigurationForPublic
 from models.documents.user_lock_configuration import UserLockConfiguration
-from schemas import ChasterExtensionConfigurationSchema, ChasterExtensionConfigSchema
-from pprint import pprint
+from schemas import ChasterExtensionConfigurationSchema
+from utils import chaster_api
 
 router = APIRouter(prefix="/api/configuration", tags=["configuration"])
-
-developer_token = os.getenv("CHASTER_DEVELOPER_TOKEN", "")
-cuid = cuid_wrapper()
 
 @router.get("/{configuration_token}", response_model=ChasterExtensionConfigurationSchema)
 async def configuration(configuration_token: str):
     """
         Get the configuration of the extension
     """
-    headers = {
-        "accept": "application/json",
-        "Authorization": f"Bearer {developer_token}"
-    }
-
     data: PartnerConfigurationForPublic | None = None
 
     try:
-        response = requests.get(
-            f"https://api.chaster.app/api/extensions/configurations/{configuration_token}",
-            headers=headers
+        response = await chaster_api.chaster_client.get(
+            f"/api/extensions/configurations/{configuration_token}"
         )
         response.raise_for_status()
         data = PartnerConfigurationForPublic(**response.json())
 
-    except requests.exceptions.HTTPError as e:
-        status_code = e.response.status_code if e.response else 500
-        raise HTTPException(status_code=status_code, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -95,48 +85,39 @@ async def update_configuration(configuration_token: str, payload: dict):
     """
         Update the configuration of the extension
     """
-    developer_token = os.getenv("CHASTER_DEVELOPER_TOKEN", "")
-
-    headers = {
-        "accept": "application/json",
-        "Authorization": f"Bearer {developer_token}",
-        "Content-Type": "application/json",
-    }
-
     try:
-        response = requests.put(
-            f"https://api.chaster.app/api/extensions/configurations/{configuration_token}",
-            headers=headers,
+        response = await chaster_api.chaster_client.put(
+            f"/api/extensions/configurations/{configuration_token}",
             json={"config": payload}
         )
         response.raise_for_status()
-        
+
         data = response.json()
         session_id = data.get("sessionId")
-        pprint(data)
-        print(f"[config-put] payload received: {payload}")
+        # Not logging the full Chaster response: it contains user data (REVIEW.md #13).
         print(f"[config-put] session_id from chaster: {session_id}")
-        
+
         if session_id:
             lock_config = await UserLockConfiguration.find_one(
                 UserLockConfiguration.session_id == session_id
             )
             if lock_config:
                 print(f"[config-put] found lock_config id: {lock_config.id}")
-                
+
                 lock_config.config = data.get("config")
                 await lock_config.save()
 
-                manager.send_config_update(lock_config.link_token or "", lock_config.config)
+                manager.update_cached_config(lock_config.link_token or "", lock_config.config)
                 print(f"[DB] Updated UserLockConfiguration for session {session_id!r}")
             else:
                 print(f"[config-put] NO lock_config found for session_id: {session_id}")
         else:
             print(f"[config-put] NO session_id in response!")
-            
+
         return {"status": "ok"}
-    except requests.exceptions.HTTPError as e:
-        status_code = e.response.status_code if e.response else 500
-        raise HTTPException(status_code=status_code, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")

@@ -6,8 +6,8 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
     """
     Handle the 'lock_unfrozen' event action from Chaster.
     """
-    session_id = payload['data']['sessionId']
-    
+    session_id = payload.get('data', {}).get('sessionId')
+
     if not session_id:
         print("[lock_unfrozen] Error: Could not find sessionId in payload.")
         return {"status": "ok", "action": "lock_unfrozen_ignored_no_session"}
@@ -29,28 +29,32 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
         return {"status": "ok", "action": "lock_unfrozen_ignored_config_false"}
         
     connection = manager.get_by_user_link_token(lock_config.link_token)
-    
+
     # fetch lock_password from lock_config
     retrieved_password = lock_config.lock_password
-    
+
+    if not retrieved_password:
+        # Never send {"secret": None} to the plugin (REVIEW.md #20).
+        print(f"[lock_unfrozen] No lock_password stored for session {session_id}, cannot unlock.")
+        return {"status": "error", "error": "no_lock_password"}
+
     if connection:
         print(f"[lock_unfrozen] Found connection for link_token {lock_config.link_token}")
         # disable Puryfi
         unlockResponse = await connection.send_message("enterLockPassword", {"secret": retrieved_password})
-        
-        if unlockResponse['type'] == 'ok':
+
+        if unlockResponse.get('type') == 'ok':
             disableResponse = await connection.send_message("setState", {"path": "enabled", "value": False})
         else:
-            print(f"[lock_unfrozen] Failed to unlock lock '{session_id}', error: {unlockResponse['error']}")
-            return {"status": "error", "error": unlockResponse['error']}
+            error = unlockResponse.get('error', 'unknown_error') if isinstance(unlockResponse, dict) else 'unknown_error'
+            print(f"[lock_unfrozen] Failed to unlock lock '{session_id}', error: {error}")
+            return {"status": "error", "error": error}
 
         print(f"[lock_unfrozen] Sent messages to connection: {unlockResponse}, {disableResponse}")
-    
+
         return {"status": "ok", "action": "lock_unfrozen_processed"}
     else:
         print(f"[lock_unfrozen] No connection found for link_token {lock_config.link_token}. Queuing message.")
         await queue_message(lock_config.link_token, "enterLockPassword", {"secret": retrieved_password})
         await queue_message(lock_config.link_token, "setState", {"path": "enabled", "value": False})
         return {"status": "ok", "action": "lock_unfrozen_queued_no_connection"}
-
-    return {"status": "ok", "action": "lock_unfrozen_processed"}
