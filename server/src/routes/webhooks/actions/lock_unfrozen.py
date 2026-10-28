@@ -2,6 +2,7 @@ from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
 from services.queue import queue_message
 
+
 async def handle_lock_unfrozen(payload: dict) -> dict:
     """
     Handle the 'lock_unfrozen' event action from Chaster.

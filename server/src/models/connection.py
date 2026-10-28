@@ -1,16 +1,17 @@
-from utils.chaster_api import create_custom_log
-from models.documents import UserLockConfiguration
-from typings.puryfi_enums import PuryfiObjectLabel
 import asyncio
+
 import msgpack
 from fastapi import WebSocket
-from services.chaster import add_time_to_lock
 
-from services.queue import fetch_queued_messages, queue_message
+from models.documents import UserLockConfiguration
+from services.chaster import add_time_to_lock
+from services.queue import fetch_queued_messages
+from typings.puryfi_enums import PuryfiObjectLabel
+from utils.chaster_api import create_custom_log
 
 manifest = {
     "name": "Puryfier",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Link Chaster with Puryfi",
     "author": "Sereti",
     "website": "https://paa.ge/sereti",
@@ -197,7 +198,7 @@ class Connection:
             if res.get("type", "") == "error":
                 print(f"Failed to subscribe to static media scans: {res.get('message')}")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one failed init must not kill the connection
             print(f"Initialization error: {e}")
 
     async def process_queued_messages(self, user_link_token: str) -> None:

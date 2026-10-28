@@ -34,9 +34,11 @@ def rpc_response(request_msg: dict, payload: dict) -> bytes:
 
 class TestLifecycle:
     def test_unknown_token_is_rejected(self, client):
-        with pytest.raises(WebSocketDisconnect) as exc_info:
-            with client.websocket_connect("/ws/no-such-token"):
-                pass
+        with (
+            pytest.raises(WebSocketDisconnect) as exc_info,
+            client.websocket_connect("/ws/no-such-token"),
+        ):
+            pass
         assert exc_info.value.code == 4004
 
     def test_connection_registered_then_removed_on_disconnect(

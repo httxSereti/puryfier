@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
-from typing import Any, Annotated
+from datetime import UTC, datetime
+from typing import Annotated, Any, ClassVar
 
 from beanie import Document, Indexed
 from pydantic import Field
@@ -15,10 +15,10 @@ class QueuedMessage(Document):
     link_token: Annotated[str, Indexed()]
     msg_type: str
     payload: dict[str, Any]
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     class Settings:
         name = "queued_messages"
-        indexes = [
+        indexes: ClassVar[list[IndexModel]] = [
             IndexModel([("created_at", ASCENDING)], expireAfterSeconds=QUEUE_TTL_SECONDS),
         ]

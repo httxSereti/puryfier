@@ -1,12 +1,14 @@
-from fastapi import APIRouter
-from models.documents import ProcessedWebhookEvent
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi import status, Depends, HTTPException, Request
-from pymongo.errors import DuplicateKeyError
-from .actions import handle_lock_frozen, handle_lock_unfrozen, handle_extension_updated
 import json
 import os
 import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pymongo.errors import DuplicateKeyError
+
+from models.documents import ProcessedWebhookEvent
+
+from .actions import handle_extension_updated, handle_lock_frozen, handle_lock_unfrozen
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhook"])
 security = HTTPBasic()

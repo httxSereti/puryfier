@@ -1,9 +1,12 @@
-from models.connection_manager import manager
 import httpx
+from beanie.exceptions import CollectionWasNotInitialized
 from fastapi import APIRouter, HTTPException
-from typings.chaster import PartnerConfigurationForPublic
+from pymongo.errors import PyMongoError
+
+from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
 from schemas import ChasterExtensionConfigurationSchema
+from typings.chaster import PartnerConfigurationForPublic
 from utils import chaster_api
 
 router = APIRouter(prefix="/api/configuration", tags=["configuration"])
@@ -23,11 +26,11 @@ async def configuration(configuration_token: str):
         data = PartnerConfigurationForPublic(**response.json())
 
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}") from e
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
     # no lock active, shared-lock or self-lock so use chaster to save configuration
     if not data.sessionId:
@@ -43,8 +46,8 @@ async def configuration(configuration_token: str):
         lock_config = await UserLockConfiguration.find_one(
             UserLockConfiguration.session_id == data.sessionId
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Unable to fetch lock_config")
+    except (CollectionWasNotInitialized, PyMongoError) as e:
+        raise HTTPException(status_code=500, detail="Unable to fetch lock_config") from e
     
     # if no lock_config found, create one
     if lock_config is None:
@@ -93,6 +96,8 @@ async def update_configuration(configuration_token: str, payload: dict):
         response.raise_for_status()
 
         data = response.json()
+        if not isinstance(data, dict):
+            raise TypeError("Unexpected Chaster response")
         session_id = data.get("sessionId")
         # Not logging the full Chaster response: it contains user data (REVIEW.md #13).
         print(f"[config-put] session_id from chaster: {session_id}")
@@ -112,12 +117,12 @@ async def update_configuration(configuration_token: str, payload: dict):
             else:
                 print(f"[config-put] NO lock_config found for session_id: {session_id}")
         else:
-            print(f"[config-put] NO session_id in response!")
+            print("[config-put] NO session_id in response!")
 
         return {"status": "ok"}
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}") from e
+    except (CollectionWasNotInitialized, PyMongoError, TypeError, ValueError) as e:
+        raise HTTPException(status_code=500, detail="Internal server error") from e

@@ -1,5 +1,6 @@
-from schemas.chaster_extension_configuration_schema import ChasterExtensionConfigSchema
 from pydantic import BaseModel, ConfigDict
+
+from schemas.chaster_extension_configuration_schema import ChasterExtensionConfigSchema
 
 
 class ChasterExtensionSessionSchema(BaseModel):

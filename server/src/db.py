@@ -1,9 +1,10 @@
 import os
+
 from beanie import init_beanie
 from pymongo import AsyncMongoClient
 from pymongo.uri_parser import parse_uri
-from models.documents import UserLockConfiguration, QueuedMessage, ProcessedWebhookEvent
 
+from models.documents import ProcessedWebhookEvent, QueuedMessage, UserLockConfiguration
 
 _client: AsyncMongoClient | None = None
 

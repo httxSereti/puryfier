@@ -1,13 +1,14 @@
-from schemas import ChasterExtensionConfigSchema
-from typing import Dict
+from typing import Self
+
 from models.connection import Connection
+from schemas import ChasterExtensionConfigSchema
 
 
 class ConnectionManager:
     _instance: "ConnectionManager | None" = None
-    _connections: Dict[str, Connection]
+    _connections: dict[str, Connection]
 
-    def __new__(cls) -> "ConnectionManager":
+    def __new__(cls) -> Self:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._connections = {}

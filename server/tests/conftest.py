@@ -14,7 +14,6 @@ test_configuration.py, test_websocket.py, ...) and reuse these fixtures.
 
 import pytest
 from fastapi.testclient import TestClient
-
 from memory_mongo import InMemoryMongoClient
 
 TEST_DB_NAME = "puryfi_chaster_test"

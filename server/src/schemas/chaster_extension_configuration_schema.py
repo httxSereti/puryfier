@@ -1,5 +1,6 @@
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
+
 
 class CensorPicsConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -27,10 +28,10 @@ class ChasterExtensionConfigurationSchema(BaseModel):
     """
     is_online: bool = False
     has_linked_plugin: bool = False
-    link_token: Optional[str] = None
+    link_token: str | None = None
 
     """
         Chaster extension configuration
     """
     has_session: bool = False
-    config: Optional[ChasterExtensionConfigSchema] = None
+    config: ChasterExtensionConfigSchema | None = None

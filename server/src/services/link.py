@@ -1,3 +1,6 @@
+from beanie.exceptions import CollectionWasNotInitialized
+from pymongo.errors import PyMongoError
+
 from models.documents.user_lock_configuration import UserLockConfiguration
 from utils.chaster_api import create_custom_log
 
@@ -29,13 +32,13 @@ async def link_with_token(link_token: str) -> bool:
                 session_id=session_id,
                 role="user",
                 title="%USER% linked Puryfi",
-                description=f"Monitoring is now active with Puryfi.",
+                description="Monitoring is now active with Puryfi.",
                 icon="link",
                 color="#ffffff",
             )
 
         return True
 
-    except Exception as e:
+    except (CollectionWasNotInitialized, PyMongoError) as e:
         print(f"[Link] Error during linking: {e}")
         return False

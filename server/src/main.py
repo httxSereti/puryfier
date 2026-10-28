@@ -1,14 +1,17 @@
 import os
 from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db import init_db, close_db
-from routes import websocket, webhooks, extensions, configuration
+
+from db import close_db, init_db
+from routes import configuration, extensions, webhooks, websocket
 from utils.chaster_api import close_chaster_client
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

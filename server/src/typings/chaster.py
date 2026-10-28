@@ -1,5 +1,7 @@
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 class LockForPublic(BaseModel):
     id: str = Field(..., alias="_id")
@@ -8,11 +10,11 @@ class LockForPublic(BaseModel):
     title: str = ""
     totalDuration: int = 0
     startDate: str = ""
-    endDate: Optional[str] = None
+    endDate: str | None = None
     minDate: str = ""
     maxDate: str = ""
-    minLimitDate: Optional[str] = None
-    maxLimitDate: Optional[str] = None
+    minLimitDate: str | None = None
+    maxLimitDate: str | None = None
     displayRemainingTime: bool = False
     isAllowedToViewTime: bool = False
     isReadyToUnlock: bool = False
@@ -22,9 +24,9 @@ class LockForPublic(BaseModel):
     limitLockTime: bool = False
     combination: str = ""
     hideTimeLogs: bool = False
-    user: Optional[Any] = None
-    keyholder: Optional[Any] = None
-    sharedLock: Optional[Any] = None
+    user: Any | None = None
+    keyholder: Any | None = None
+    sharedLock: Any | None = None
     extensions: list[Any] = []
 
 class PartnerSession(BaseModel):
@@ -37,7 +39,7 @@ class PartnerSession(BaseModel):
     config: dict = {}
     mode: str = ""
     regularity: int = 0
-    userData: Optional[Any] = None
+    userData: Any | None = None
     nbActionsRemaining: int = 0
     lock: LockForPublic
 
@@ -50,6 +52,6 @@ class PartnerConfigurationForPublic(BaseModel):
     config: dict = {}
     role: str
     user: str
-    sessionId: Optional[str] = None
+    sessionId: str | None = None
     extensionSlug: str
     createdAt: str

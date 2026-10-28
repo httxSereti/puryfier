@@ -1,6 +1,6 @@
 [project]
 name = "puryfi-chaster-linker-ws"
-version = "0.2.1"
+version = "0.3.0"
 description = "Puryfi Chaster Linker by PluneCorp"
 authors = [{ name = "Sereti" }]
 readme = "README.md"
@@ -17,6 +17,16 @@ dependencies = [
     "httpx>=0.28.1",
 ]
 
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+    # FastAPI dependencies are declared as function calls in argument defaults.
+    "B008",
+]
+
 [tool.pyright]
 include = ["src"]
 extraPaths = ["src"]
@@ -30,4 +40,5 @@ filterwarnings = ["ignore::DeprecationWarning:mongomock.*"]
 dev = [
     "mongomock>=4.3.0",
     "pytest>=9.1.1",
+    "ruff>=0.17.3",
 ]

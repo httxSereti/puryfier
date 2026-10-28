@@ -1,7 +1,10 @@
-from models.documents import UserLockConfiguration
+from beanie.exceptions import CollectionWasNotInitialized
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pymongo.errors import PyMongoError
+
 from models.connection import Connection
 from models.connection_manager import manager
+from models.documents import UserLockConfiguration
 
 router = APIRouter(prefix="/ws")
 
@@ -17,7 +20,7 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
         user_lock_config = await UserLockConfiguration.find_one(
             UserLockConfiguration.link_token == user_link_token
         )
-    except Exception as e:
+    except (CollectionWasNotInitialized, PyMongoError) as e:
         print(f"[WS-Puryfi] Error fetching user lock configuration: {e}")
         await websocket.close(code=1011)
         return
@@ -40,7 +43,7 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
             await connection.handle_message(data)
     except WebSocketDisconnect:
         pass
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - close the socket on any handler failure
         # e.g. a malformed msgpack frame: never leave the dead connection
         # registered (REVIEW.md #6).
         print(f"[WS-Puryfi] Handler error for user_token '{user_link_token}': {e}")

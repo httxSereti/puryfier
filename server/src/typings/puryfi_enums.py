@@ -1,5 +1,6 @@
 from enum import IntEnum
 
+
 class PuryfiObjectLabel(IntEnum):
     Tummy = 0
     TummyCovered = 1

@@ -1,5 +1,7 @@
 from typing import Annotated
+
 from beanie import Document, Indexed
+
 from schemas import ChasterExtensionConfigSchema
 
 

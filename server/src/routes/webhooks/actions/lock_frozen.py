@@ -1,7 +1,9 @@
+import secrets
+
 from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
-import secrets
 from services.queue import queue_message
+
 
 async def handle_lock_frozen(payload: dict) -> dict:
     """

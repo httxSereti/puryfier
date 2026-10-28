@@ -1,9 +1,10 @@
-from models.connection_manager import manager
 from cuid2 import cuid_wrapper
 from fastapi import APIRouter, HTTPException
-from typings.chaster import PartnerGetSessionAuthRepDto
+
+from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
-from schemas import ChasterExtensionSessionSchema, ChasterExtensionConfigSchema
+from schemas import ChasterExtensionConfigSchema, ChasterExtensionSessionSchema
+from typings.chaster import PartnerGetSessionAuthRepDto
 from utils.chaster_api import get_session_auth
 
 router = APIRouter(prefix="/api/session", tags=["session"])
