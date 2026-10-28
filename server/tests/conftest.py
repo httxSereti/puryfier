@@ -12,6 +12,7 @@ Add per-endpoint test modules next to this file (test_extensions.py,
 test_configuration.py, test_websocket.py, ...) and reuse these fixtures.
 """
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from memory_mongo import InMemoryMongoClient
@@ -55,6 +56,32 @@ def client(mongo: InMemoryMongoClient, monkeypatch: pytest.MonkeyPatch):
 def mongo_db(mongo: InMemoryMongoClient):
     """Sync handle to the test database for seeding/assertions."""
     return mongo.sync_client[TEST_DB_NAME]
+
+
+@pytest.fixture()
+def mock_chaster_api(monkeypatch):
+    """Swap the shared Chaster httpx client for a MockTransport one.
+
+    The returned factory accepts a payload/status and returns the captured
+    requests made by the application.
+    """
+    import utils.chaster_api as chaster_api_module
+
+    def _mock(payload: dict, status_code: int = 200) -> list[httpx.Request]:
+        calls: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return httpx.Response(status_code, json=payload)
+
+        mock_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url=chaster_api_module.CHASTER_BASE_URL,
+        )
+        monkeypatch.setattr(chaster_api_module, "chaster_client", mock_client)
+        return calls
+
+    return _mock
 
 
 @pytest.fixture()

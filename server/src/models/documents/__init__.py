@@ -1,5 +1,5 @@
-from .processed_webhook_event import ProcessedWebhookEvent
 from .queued_message import QueuedMessage
 from .user_lock_configuration import UserLockConfiguration
+from .webhook_inbox_entry import WebhookInboxEntry
 
-__all__ = ["ProcessedWebhookEvent", "QueuedMessage", "UserLockConfiguration"]
+__all__ = ["QueuedMessage", "UserLockConfiguration", "WebhookInboxEntry"]

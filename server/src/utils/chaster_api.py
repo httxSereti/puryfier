@@ -35,9 +35,16 @@ async def get_session_auth(main_token: str) -> dict:
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        # Never expose str(e): httpx includes the request URL, which contains
+        # the secret main_token.
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail="Chaster rejected the session token",
+        ) from e
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}")
+        raise HTTPException(
+            status_code=502, detail="Chaster API is unavailable"
+        ) from e
 
 
 async def create_custom_log(session_id: str, title: str, description: str, role: str, icon: str = "link", color: str = "#ffffff") -> bool:

@@ -3,6 +3,7 @@ import secrets
 from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
 from services.queue import queue_message
+from utils.redaction import token_fingerprint
 
 
 async def handle_lock_frozen(payload: dict) -> dict:
@@ -38,7 +39,10 @@ async def handle_lock_frozen(payload: dict) -> dict:
     await lock_config.save()
     
     if connection:
-        print(f"[lock_frozen] Found connection for link_token {lock_config.link_token}")
+        print(
+            "[lock_frozen] Found connection for token "
+            f"{token_fingerprint(lock_config.link_token)}"
+        )
         # enable Puryfi
         await connection.send_message("setState", {"path": "enabled", "value": True})
         await connection.send_message("setState", {
@@ -50,7 +54,10 @@ async def handle_lock_frozen(payload: dict) -> dict:
     
         return {"status": "ok", "action": "lock_frozen_processed"}
     else:
-        print(f"[lock_frozen] No connection found for link_token {lock_config.link_token}. Queuing message.")
+        print(
+            "[lock_frozen] No connection found for token "
+            f"{token_fingerprint(lock_config.link_token)}; queuing message."
+        )
         await queue_message(lock_config.link_token, "setState", {"path": "enabled", "value": True})
         await queue_message(lock_config.link_token, "setState", {
             "path": "lockConfiguration", 

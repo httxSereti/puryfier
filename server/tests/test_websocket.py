@@ -8,11 +8,15 @@ import time
 
 import msgpack
 import pytest
+from conftest import WEBHOOK_AUTH
 from starlette.websockets import WebSocketDisconnect
+from test_webhooks_chaster import wait_for_inbox
 
 from models.connection_manager import manager
 from models.session_watchers import watchers
 from utils import chaster_api
+
+WEBHOOK_URL = "/api/webhooks/extensions/chaster"
 
 INTENTS = [
     "readUserState",
@@ -48,7 +52,7 @@ class TestLifecycle:
     def test_connection_registered_then_removed_on_disconnect(
         self, client, seed_lock_configuration
     ):
-        seed_lock_configuration(link_token="ws-tok-1", session_id=None)
+        seed_lock_configuration(link_token="ws-tok-1", session_id="ws-session-1")
 
         with client.websocket_connect("/ws/ws-tok-1"):
             assert manager.get_by_user_link_token("ws-tok-1") is not None
@@ -58,7 +62,7 @@ class TestLifecycle:
     def test_malformed_frame_removes_connection(
         self, client, seed_lock_configuration
     ):
-        seed_lock_configuration(link_token="ws-tok-2", session_id=None)
+        seed_lock_configuration(link_token="ws-tok-2", session_id="ws-session-2")
 
         with client.websocket_connect("/ws/ws-tok-2") as ws:
             assert manager.get_by_user_link_token("ws-tok-2") is not None
@@ -76,7 +80,7 @@ class TestQueueDrain:
     ):
         """REVIEW.md #9: queued messages must be delivered in order, and each
         deleted only after successful delivery."""
-        seed_lock_configuration(link_token="ws-tok-3", session_id=None)
+        seed_lock_configuration(link_token="ws-tok-3", session_id="ws-session-3")
         mongo_db["queued_messages"].insert_many([
             {
                 "link_token": "ws-tok-3",
@@ -132,7 +136,7 @@ class TestQueueDrain:
     def test_failed_send_keeps_message_queued(
         self, client, seed_lock_configuration, mongo_db
     ):
-        seed_lock_configuration(link_token="ws-tok-4", session_id=None)
+        seed_lock_configuration(link_token="ws-tok-4", session_id="ws-session-4")
         mongo_db["queued_messages"].insert_one({
             "link_token": "ws-tok-4",
             "msg_type": "setState",
@@ -235,11 +239,7 @@ class TestRealtimeStatus:
         async def fake_get_session_auth(_main_token: str) -> dict:
             return {"role": "wearer", "session": {"sessionId": "realtime-session"}}
 
-        async def fake_create_custom_log(*_args, **_kwargs) -> bool:
-            return True
-
         monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
-        monkeypatch.setattr("services.link.create_custom_log", fake_create_custom_log)
 
         with client.websocket_connect("/ws/session/main-token") as watcher:
             assert watcher.receive_json() == {
@@ -269,6 +269,62 @@ class TestRealtimeStatus:
                 "is_online": False,
                 "has_linked_plugin": True,
             }
+
+    def test_session_deleted_closes_plugin_and_watcher_sockets(
+        self, client, seed_lock_configuration, mongo_db, monkeypatch
+    ):
+        """Ending the Chaster session must revoke the live sockets."""
+        seed_lock_configuration(
+            session_id="realtime-session",
+            link_token="rt-token",
+            has_linked_plugin=True,
+        )
+
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "realtime-session"}}
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+
+        with client.websocket_connect("/ws/session/main-token") as watcher:
+            assert watcher.receive_json()["type"] == "status"
+
+            with client.websocket_connect("/ws/rt-token") as puryfi:
+                assert manager.get_by_user_link_token("rt-token") is not None
+
+                payload = {
+                    "event": "extension_session.deleted",
+                    "requestId": "req-ws-del-1",
+                    "data": {"session": {"sessionId": "realtime-session"}},
+                }
+                response = client.post(
+                    WEBHOOK_URL, json=payload, auth=WEBHOOK_AUTH
+                )
+                assert response.status_code == 202
+                wait_for_inbox(
+                    mongo_db, "extension_session.deleted:realtime-session"
+                )
+
+                # The plugin connection published "online"; deletion then
+                # publishes "offline" before closing both sockets.
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": True,
+                    "has_linked_plugin": True,
+                }
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": False,
+                    "has_linked_plugin": True,
+                }
+                with pytest.raises(WebSocketDisconnect) as puryfi_closed:
+                    puryfi.receive_bytes()
+                assert puryfi_closed.value.code == 4004
+
+                with pytest.raises(WebSocketDisconnect) as watcher_closed:
+                    watcher.receive_json()
+                assert watcher_closed.value.code == 4004
+
+        assert manager.get_by_user_link_token("rt-token") is None
 
     def test_configuration_watcher_receives_status(
         self, client, seed_lock_configuration, monkeypatch

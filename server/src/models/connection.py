@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import msgpack
 from fastapi import WebSocket
@@ -8,6 +9,8 @@ from services.chaster import add_time_to_lock
 from services.queue import fetch_queued_messages
 from typings.puryfi_enums import PuryfiObjectLabel
 from utils.chaster_api import create_custom_log
+
+logger = logging.getLogger(__name__)
 
 manifest = {
     "name": "Puryfier",
@@ -82,6 +85,14 @@ class Connection:
             if not future.done():
                 future.set_exception(ConnectionError(reason))
         self.pending_requests.clear()
+
+    async def close(self, code: int = 1000) -> None:
+        """Revoke the connection: fail pending RPCs and close the socket."""
+        self.fail_pending("session revoked")
+        try:
+            await self.websocket.close(code=code)
+        except Exception:
+            logger.debug("Failed to close Puryfi websocket", exc_info=True)
 
     async def send_response(self, response_id: int, payload: dict):
         message = {

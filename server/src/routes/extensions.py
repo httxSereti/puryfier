@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
 from schemas import ChasterExtensionConfigSchema, ChasterExtensionSessionSchema
+from services.lock_configuration import get_or_create_lock_configuration
 from typings.chaster import PartnerGetSessionAuthRepDto
 from utils.chaster_api import get_session_auth
 
@@ -31,33 +32,24 @@ async def fetch_session(main_token: str):
     wearer = data.get("session", {}).get("lock", {}).get("user")
     wearer_id: str | None = wearer.get("_id") if isinstance(wearer, dict) else None
 
-    lock_config = await UserLockConfiguration.find_one(
-        UserLockConfiguration.session_id == session_id
+    lock_config = await get_or_create_lock_configuration(
+        session_id,
+        config=ChasterExtensionConfigSchema(
+            **data.get("session", {}).get("config", {}),
+        ),
+        lock_id=lock_id or None,
+        keyholder_id=keyholder_id,
+        wearer_id=wearer_id,
     )
-
-    if lock_config is None:
-        # if no lock_config found, create one
-        lock_config = UserLockConfiguration(
-            session_id=session_id,
-            lock_id=lock_id or None,
-            keyholder_id=keyholder_id,
-            wearer_id=wearer_id,
-            config=ChasterExtensionConfigSchema(
-                **data.get("session", {}).get("config", {}),
-            ),
-        )
-        await lock_config.insert()
-        print(f"[DB] Created UserLockConfiguration for session {lock_id!r}")
 
     # get if there is an active connection to this session
     is_online = manager.get_by_user_link_token(lock_config.link_token or "")
 
     role = data.get("role", "")
 
-    # send lockpassword in clear only to keyholder
-    lock_password = lock_config.lock_password
-    if role == "wearer" and lock_password:
-        lock_password = "HIDDEN"
+    # Deny by default: only the keyholder may receive the emergency password.
+    # Unknown or future roles must never get the cleartext secret.
+    lock_password = lock_config.lock_password if role == "keyholder" else None
 
     return ChasterExtensionSessionSchema(
         id=str(lock_config.id),

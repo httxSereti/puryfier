@@ -1,6 +1,9 @@
+import logging
 from typing import Any
 
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 class SessionWatcherManager:
@@ -28,6 +31,14 @@ class SessionWatcherManager:
                 await websocket.send_json(message)
             except Exception:  # noqa: BLE001 - a dead watcher must not break the fan-out
                 self.remove(session_id, websocket)
+
+    async def close_session(self, session_id: str, code: int = 1000) -> None:
+        """Close every browser socket watching a session that no longer exists."""
+        for websocket in self._watchers.pop(session_id, set()):
+            try:
+                await websocket.close(code=code)
+            except Exception:
+                logger.debug("Failed to close session watcher", exc_info=True)
 
 
 watchers = SessionWatcherManager()

@@ -41,6 +41,20 @@ class ConnectionManager:
     def get_by_user_link_token(self, user_link_token: str) -> Connection | None:
         return self._connections.get(user_link_token)
 
+    async def close_by_user_link_token(
+        self, user_link_token: str, code: int = 1000
+    ) -> bool:
+        """Revoke a plugin connection and tell watchers it is offline."""
+        connection = self._connections.pop(user_link_token, None)
+        if connection is None:
+            return False
+
+        # Publish before closing the watchers: the session lifecycle handler
+        # closes them right afterwards.
+        await self.publish_status(connection)
+        await connection.close(code=code)
+        return True
+
     def status_for_lock_config(self, lock_config: UserLockConfiguration) -> dict[str, Any]:
         """Current Puryfi link status, shaped for the extension UI sockets."""
         return {

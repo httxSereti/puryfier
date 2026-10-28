@@ -4,7 +4,8 @@ Regression tests for REVIEW.md critical #2: the emergency lock password was
 silently dropped by the session response schema and never reached the UI.
 """
 
-import httpx
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 
@@ -24,27 +25,18 @@ def make_chaster_response(role: str, session_id: str, lock_id: str = "lock-1") -
     }
 
 
-@pytest.fixture()
-def mock_chaster_api(monkeypatch):
-    """Swap the shared Chaster httpx client for a MockTransport one returning
-    the given payload, and capture the requests made to it."""
-    import utils.chaster_api as chaster_api_module
-
-    def _mock(payload: dict, status_code: int = 200) -> list[httpx.Request]:
-        calls: list[httpx.Request] = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            calls.append(request)
-            return httpx.Response(status_code, json=payload)
-
-        mock_client = httpx.AsyncClient(
-            transport=httpx.MockTransport(handler),
-            base_url=chaster_api_module.CHASTER_BASE_URL,
-        )
-        monkeypatch.setattr(chaster_api_module, "chaster_client", mock_client)
-        return calls
-
-    return _mock
+def make_configuration_response(
+    role: str, session_id: str, config: dict | None = None
+) -> dict:
+    """Shape returned by Chaster's GET /api/extensions/configurations/{token}."""
+    return {
+        "config": config or {},
+        "role": role,
+        "user": "wearer-1",
+        "sessionId": session_id,
+        "extensionSlug": "puryfi",
+        "createdAt": "2026-01-01T00:00:00Z",
+    }
 
 
 class TestFetchSessionLockPassword:
@@ -64,16 +56,19 @@ class TestFetchSessionLockPassword:
         assert body["lock_password"] == "s3cret"
         assert body["role"] == "keyholder"
 
-    def test_wearer_receives_hidden_lock_password(
-        self, client, seed_lock_configuration, mock_chaster_api
+    @pytest.mark.parametrize("role", ["wearer", "unknown", ""])
+    def test_non_keyholder_never_receives_lock_password(
+        self, client, seed_lock_configuration, mock_chaster_api, role
     ):
         seed_lock_configuration(session_id=self.SESSION_ID, lock_password="s3cret")
-        mock_chaster_api(make_chaster_response(role="wearer", session_id=self.SESSION_ID))
+        mock_chaster_api(
+            make_chaster_response(role=role, session_id=self.SESSION_ID)
+        )
 
         response = client.get(f"/api/session/{self.SESSION_ID}")
 
         assert response.status_code == 200
-        assert response.json()["lock_password"] == "HIDDEN"
+        assert response.json()["lock_password"] is None
 
     def test_lock_password_null_when_unset(
         self, client, seed_lock_configuration, mock_chaster_api
@@ -85,6 +80,120 @@ class TestFetchSessionLockPassword:
 
         assert response.status_code == 200
         assert response.json()["lock_password"] is None
+
+
+class TestAtomicConfigurationCreation:
+    """P0 #5: concurrent session/config requests must create at most one row."""
+
+    SESSION_ID = "session-upsert"
+
+    def test_repeated_fetch_reuses_the_same_configuration(
+        self, client, seed_lock_configuration, mongo_db, mock_chaster_api
+    ):
+        seed_lock_configuration(
+            session_id=self.SESSION_ID,
+            link_token="existing-token",
+            lock_password="s3cret",
+        )
+        seeded = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        mock_chaster_api(
+            make_chaster_response(role="wearer", session_id=self.SESSION_ID)
+        )
+
+        first = client.get("/api/session/main-token")
+        second = client.get("/api/session/main-token")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["id"] == second.json()["id"] == str(seeded["_id"])
+        assert first.json()["link_token"] == "existing-token"
+        assert (
+            mongo_db["users_lock_configurations"].count_documents(
+                {"session_id": self.SESSION_ID}
+            )
+            == 1
+        )
+
+    def test_concurrent_fetches_create_exactly_one_configuration(
+        self, client, mongo_db, mock_chaster_api
+    ):
+        mock_chaster_api(
+            make_chaster_response(role="wearer", session_id=self.SESSION_ID)
+        )
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            responses = list(
+                executor.map(lambda _: client.get("/api/session/main-token"), range(8))
+            )
+
+        assert all(response.status_code == 200 for response in responses)
+        assert len({response.json()["id"] for response in responses}) == 1
+        assert (
+            mongo_db["users_lock_configurations"].count_documents(
+                {"session_id": self.SESSION_ID}
+            )
+            == 1
+        )
+
+
+class TestConfigurationCreation:
+    """The configuration route must create at most one row and not overwrite."""
+
+    SESSION_ID = "session-config"
+
+    def test_get_creates_configuration_when_missing(
+        self, client, mongo_db, mock_chaster_api
+    ):
+        mock_chaster_api(
+            make_configuration_response(
+                role="wearer",
+                session_id=self.SESSION_ID,
+                config={"lock_on_freeze": True},
+            )
+        )
+
+        response = client.get("/api/configuration/config-token")
+
+        assert response.status_code == 200
+        assert response.json()["has_session"] is True
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        assert stored is not None
+        assert stored["config"]["lock_on_freeze"] is True
+        assert (
+            mongo_db["users_lock_configurations"].count_documents(
+                {"session_id": self.SESSION_ID}
+            )
+            == 1
+        )
+
+    def test_get_preserves_existing_configuration(
+        self, client, seed_lock_configuration, mongo_db, mock_chaster_api
+    ):
+        seed_lock_configuration(
+            session_id=self.SESSION_ID,
+            link_token="existing-token",
+        )
+        mock_chaster_api(
+            make_configuration_response(
+                role="wearer",
+                session_id=self.SESSION_ID,
+                config={"lock_on_freeze": False},
+            )
+        )
+
+        response = client.get("/api/configuration/config-token")
+
+        assert response.status_code == 200
+        assert response.json()["link_token"] == "existing-token"
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        # Default seeded config is True; the upsert must not overwrite it.
+        assert stored["config"]["lock_on_freeze"] is True
 
 
 class TestFetchSessionLinkToken:
@@ -168,3 +277,29 @@ class TestCreateLinkToken:
         response = client.post("/api/session/bad-token/link-token")
 
         assert response.status_code == 401
+
+
+class TestTokenRedactionInErrors:
+    """Error responses must never echo Chaster URLs containing tokens."""
+
+    def test_session_error_does_not_leak_main_token(
+        self, client, mock_chaster_api
+    ):
+        token = "super-secret-main-token"
+        mock_chaster_api({"detail": "unauthorized"}, status_code=401)
+
+        response = client.get(f"/api/session/{token}")
+
+        assert response.status_code == 401
+        assert token not in response.text
+
+    def test_configuration_error_does_not_leak_configuration_token(
+        self, client, mock_chaster_api
+    ):
+        token = "super-secret-config-token"
+        mock_chaster_api({"detail": "unauthorized"}, status_code=401)
+
+        response = client.get(f"/api/configuration/{token}")
+
+        assert response.status_code == 401
+        assert token not in response.text

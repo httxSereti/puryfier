@@ -8,6 +8,7 @@ from models.connection_manager import manager
 from models.documents import UserLockConfiguration
 from models.session_watchers import watchers
 from utils import chaster_api
+from utils.redaction import token_fingerprint
 
 router = APIRouter(prefix="/ws")
 
@@ -46,7 +47,10 @@ async def session_status_endpoint(websocket: WebSocket, main_token: str):
         await websocket.close(code=4004)
         return
     except Exception as e:  # noqa: BLE001 - never leave the browser socket hanging
-        print(f"[WS-Realtime] Could not authenticate the session token: {e}")
+        print(
+            "[WS-Realtime] Could not authenticate the session token "
+            f"{token_fingerprint(main_token)}: {type(e).__name__}"
+        )
         await websocket.close(code=1011)
         return
 
@@ -90,11 +94,14 @@ async def configuration_status_endpoint(websocket: WebSocket, configuration_toke
         await websocket.close(code=4004)
         return
     except httpx.HTTPError as e:
-        print(f"[WS-Realtime] Could not fetch the configuration: {e}")
+        print(
+            "[WS-Realtime] Could not fetch the configuration "
+            f"{token_fingerprint(configuration_token)}: {type(e).__name__}"
+        )
         await websocket.close(code=1011)
         return
     except (TypeError, ValueError) as e:
-        print(f"[WS-Realtime] Invalid configuration response: {e}")
+        print(f"[WS-Realtime] Invalid configuration response: {type(e).__name__}")
         await websocket.close(code=1011)
         return
 
@@ -140,7 +147,10 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
         return
 
     if user_lock_config is None:
-        print(f"[WS-Puryfi] User lock configuration not found for user_token: '{user_link_token}'")
+        print(
+            "[WS-Puryfi] User lock configuration not found for token "
+            f"{token_fingerprint(user_link_token)}"
+        )
         await websocket.close(code=4004)
         return
 
@@ -150,7 +160,10 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
     connection = Connection(websocket, user_lock_config)
     await manager.add(connection, user_link_token)
 
-    print(f"[WS-Puryfi] Connection established for user_token: '{user_link_token}'")
+    print(
+        "[WS-Puryfi] Connection established for token "
+        f"{token_fingerprint(user_link_token)}"
+    )
     try:
         while True:
             data = await websocket.receive_bytes()
@@ -160,7 +173,10 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
     except Exception as e:  # noqa: BLE001 - close the socket on any handler failure
         # e.g. a malformed msgpack frame: never leave the dead connection
         # registered (REVIEW.md #6).
-        print(f"[WS-Puryfi] Handler error for user_token '{user_link_token}': {e}")
+        print(
+            "[WS-Puryfi] Handler error for token "
+            f"{token_fingerprint(user_link_token)}: {type(e).__name__}"
+        )
         try:
             await websocket.close(code=1011)
         except RuntimeError:
@@ -168,4 +184,7 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
     finally:
         await manager.remove(user_link_token, connection)
         connection.fail_pending("connection closed")
-        print(f"[WS-Puryfi] Connection closed for user_token: '{user_link_token}'")
+        print(
+            "[WS-Puryfi] Connection closed for token "
+            f"{token_fingerprint(user_link_token)}"
+        )

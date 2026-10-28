@@ -4,7 +4,7 @@ from beanie import init_beanie
 from pymongo import AsyncMongoClient
 from pymongo.uri_parser import parse_uri
 
-from models.documents import ProcessedWebhookEvent, QueuedMessage, UserLockConfiguration
+from models.documents import QueuedMessage, UserLockConfiguration, WebhookInboxEntry
 
 _client: AsyncMongoClient | None = None
 
@@ -36,7 +36,7 @@ async def init_db() -> None:
 
     await init_beanie(
         database=_client[db_name],
-        document_models=[UserLockConfiguration, QueuedMessage, ProcessedWebhookEvent],
+        document_models=[UserLockConfiguration, QueuedMessage, WebhookInboxEntry],
     )
     print("[DB] Beanie initialised ✓")
 

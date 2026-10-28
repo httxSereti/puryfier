@@ -1,6 +1,7 @@
-from typing import Annotated
+from typing import ClassVar
 
-from beanie import Document, Indexed
+from beanie import Document
+from pymongo import ASCENDING, IndexModel
 
 from schemas import ChasterExtensionConfigSchema
 
@@ -8,14 +9,14 @@ from schemas import ChasterExtensionConfigSchema
 class UserLockConfiguration(Document):
     """Persistent per-session configuration linking a Chaster lock to Puryfi."""
 
-    # Chaster lock identifier
-    lock_id: Annotated[str, Indexed()] | None = None
+    # Chaster session identifier (one configuration per session)
+    session_id: str
 
-    # Chaster session identifier
-    session_id: Annotated[str, Indexed()] | None = None
+    # Chaster lock identifier
+    lock_id: str | None = None
 
     # Token used to link the Puryfi plugin with the Chaster extension
-    link_token: Annotated[str, Indexed(unique=True)] | None = None
+    link_token: str | None = None
 
     # Whether the Puryfi plugin is actively linked to this lock
     has_linked_plugin: bool = False
@@ -39,6 +40,18 @@ class UserLockConfiguration(Document):
 
     class Settings:
         name = "users_lock_configurations"
+        indexes: ClassVar[list[IndexModel]] = [
+            IndexModel([("session_id", ASCENDING)], unique=True),
+            IndexModel([("lock_id", ASCENDING)]),
+            # Partial index: unique only for configurations that actually have
+            # a link token. A plain sparse/unique index would still index
+            # explicit nulls and reject multiple unlinked configurations.
+            IndexModel(
+                [("link_token", ASCENDING)],
+                unique=True,
+                partialFilterExpression={"link_token": {"$type": "string"}},
+            ),
+        ]
 
     def __repr__(self) -> str:
         return (

@@ -1,6 +1,7 @@
 from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
 from services.queue import queue_message
+from utils.redaction import token_fingerprint
 
 
 async def handle_lock_unfrozen(payload: dict) -> dict:
@@ -40,7 +41,10 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
         return {"status": "error", "error": "no_lock_password"}
 
     if connection:
-        print(f"[lock_unfrozen] Found connection for link_token {lock_config.link_token}")
+        print(
+            "[lock_unfrozen] Found connection for token "
+            f"{token_fingerprint(lock_config.link_token)}"
+        )
         # disable Puryfi
         unlockResponse = await connection.send_message("enterLockPassword", {"secret": retrieved_password})
 
@@ -55,7 +59,10 @@ async def handle_lock_unfrozen(payload: dict) -> dict:
 
         return {"status": "ok", "action": "lock_unfrozen_processed"}
     else:
-        print(f"[lock_unfrozen] No connection found for link_token {lock_config.link_token}. Queuing message.")
+        print(
+            "[lock_unfrozen] No connection found for token "
+            f"{token_fingerprint(lock_config.link_token)}; queuing message."
+        )
         await queue_message(lock_config.link_token, "enterLockPassword", {"secret": retrieved_password})
         await queue_message(lock_config.link_token, "setState", {"path": "enabled", "value": False})
         return {"status": "ok", "action": "lock_unfrozen_queued_no_connection"}

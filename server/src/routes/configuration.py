@@ -5,7 +5,8 @@ from pymongo.errors import PyMongoError
 
 from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
-from schemas import ChasterExtensionConfigurationSchema
+from schemas import ChasterExtensionConfigSchema, ChasterExtensionConfigurationSchema
+from services.lock_configuration import get_or_create_lock_configuration
 from typings.chaster import PartnerConfigurationForPublic
 from utils import chaster_api
 
@@ -26,9 +27,15 @@ async def configuration(configuration_token: str):
         data = PartnerConfigurationForPublic(**response.json())
 
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
+        # Avoid str(e): httpx puts the request URL (and its token) in it.
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail="Chaster rejected the configuration token",
+        ) from e
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}") from e
+        raise HTTPException(
+            status_code=502, detail="Chaster API is unavailable"
+        ) from e
     except (TypeError, ValueError) as e:
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
@@ -41,23 +48,16 @@ async def configuration(configuration_token: str):
             has_session=False
         )   
     
-    # fetch lock_config for session_id
+    # Fetch or create atomically: concurrent config/session requests for the
+    # same session must never create duplicate documents.
     try:
-        lock_config = await UserLockConfiguration.find_one(
-            UserLockConfiguration.session_id == data.sessionId
+        lock_config = await get_or_create_lock_configuration(
+            data.sessionId,
+            # Use the config from Chaster (self-lock or shared-lock).
+            config=data.config or ChasterExtensionConfigSchema(),
         )
     except (CollectionWasNotInitialized, PyMongoError) as e:
         raise HTTPException(status_code=500, detail="Unable to fetch lock_config") from e
-    
-    # if no lock_config found, create one
-    if lock_config is None:
-        # use the configuration from chaster (if it self lock or shared lock)
-        lock_config = UserLockConfiguration(
-            session_id=data.sessionId,
-            config=data.config
-        )
-        await lock_config.insert()
-        print(f"[DB] Created UserLockConfiguration for wearer session {data.sessionId!r} via config hook")
     
     if data.role == "wearer":
         configuration = ChasterExtensionConfigurationSchema(
@@ -121,8 +121,13 @@ async def update_configuration(configuration_token: str, payload: dict):
 
         return {"status": "ok"}
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail="Chaster rejected the configuration update",
+        ) from e
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Chaster API error: {e}") from e
+        raise HTTPException(
+            status_code=502, detail="Chaster API is unavailable"
+        ) from e
     except (CollectionWasNotInitialized, PyMongoError, TypeError, ValueError) as e:
         raise HTTPException(status_code=500, detail="Internal server error") from e

@@ -5,22 +5,48 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from db import close_db, init_db
 from routes import configuration, extensions, webhooks, websocket
+from routes.webhooks.chaster import validate_webhook_credentials
 from utils.chaster_api import close_chaster_client
+from utils.redaction import install_access_log_redaction
+from workers.webhook_inbox import webhook_worker
+
+install_access_log_redaction()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Also install here in case the server reset logging after importing the app.
+    install_access_log_redaction()
+    # Fail closed: never start with an unauthenticated webhook endpoint.
+    validate_webhook_credentials()
     await init_db()
-    yield
-    await close_db()
-    await close_chaster_client()
+    await webhook_worker.start()
+    try:
+        yield
+    finally:
+        await webhook_worker.stop()
+        await close_db()
+        await close_chaster_client()
 
 app = FastAPI(lifespan=lifespan)
+
+# Session/config responses contain secrets (link token, emergency password)
+# and live state: never let a browser or proxy cache them.
+NO_STORE_PATH_PREFIXES = ("/api/session/", "/api/configuration/")
+
+
+@app.middleware("http")
+async def no_store_sensitive_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(NO_STORE_PATH_PREFIXES):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 # Allowlist the known frontend origin only; "*" with credentials is invalid
 # per the CORS spec (REVIEW.md #14).

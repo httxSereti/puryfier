@@ -27,6 +27,6 @@ class ChasterExtensionSessionSchema(BaseModel):
 
     """
         Emergency Puryfi lock password.
-        Cleartext for the keyholder, "HIDDEN" for the wearer, null if unset.
+        Cleartext only for the keyholder; null for every other role or if unset.
     """
     lock_password: str | None = None

@@ -2,7 +2,7 @@ from beanie.exceptions import CollectionWasNotInitialized
 from pymongo.errors import PyMongoError
 
 from models.documents.user_lock_configuration import UserLockConfiguration
-from utils.chaster_api import create_custom_log
+from utils.redaction import token_fingerprint
 
 
 async def link_with_token(link_token: str) -> bool:
@@ -16,26 +16,16 @@ async def link_with_token(link_token: str) -> bool:
         )
 
         if lock_config is None:
-            print(f"[Link] No UserLockConfiguration found for token {link_token!r}")
+            print(
+                "[Link] No UserLockConfiguration found for token "
+                f"{token_fingerprint(link_token)}"
+            )
             return False
 
         lock_config.has_linked_plugin = True
         await lock_config.save()
 
-        session_id = lock_config.session_id
-
         print(f"[Link] Session {lock_config.id!r} is now linked ✓")
-
-        # Post a custom log entry to the Chaster lock session
-        if session_id:
-            await create_custom_log(
-                session_id=session_id,
-                role="user",
-                title="%USER% linked Puryfi",
-                description="Monitoring is now active with Puryfi.",
-                icon="link",
-                color="#ffffff",
-            )
 
         return True
 
