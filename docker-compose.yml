@@ -36,6 +36,9 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-puryfi}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-puryfi}
+    ports:
+      # Host-only bind so the backend can reach Mongo when run locally (pnpm dev).
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -79,7 +82,9 @@ services:
       - CHASTER_DEVELOPER_TOKEN=${CHASTER_DEVELOPER_TOKEN}
       - CHASTER_WEBHOOK_USER=${CHASTER_WEBHOOK_USER}
       - CHASTER_WEBHOOK_PWD=${CHASTER_WEBHOOK_PWD}
-      - DATABASE_URL=${DATABASE_URL}
+      # Always use the Compose service name inside the container; the host
+      # DATABASE_URL in .env points to localhost for local development.
+      - DATABASE_URL=mongodb://${MONGO_USER:-puryfi}:${MONGO_PASSWORD:-puryfi}@mongo:27017/puryfi_chaster?authSource=admin
       - BACKEND_URL=${BACKEND_URL:-https://api.example.com}
       - FRONT_URL=${FRONT_URL:-https://app.example.com}
       - WEBSOCKET_URL=${WEBSOCKET_URL:-wss://api.example.com}

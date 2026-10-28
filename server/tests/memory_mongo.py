@@ -148,6 +148,6 @@ class InMemoryMongoClient:
     def get_database(self, name, **kwargs) -> _AsyncDatabase:
         return _AsyncDatabase(self.sync_client.get_database(name))
 
-    def close(self):
-        # db.py calls close() synchronously; nothing to release here.
+    async def close(self):
+        # Mirrors AsyncMongoClient.close(), which is a coroutine.
         pass

@@ -56,7 +56,14 @@ pnpm dev       # runs the frontend and backend together
 
 To target a single workspace, use `pnpm --filter server dev` (or `front`).
 
-The backend needs a reachable MongoDB instance; set `DATABASE_URL` in `server/.env`.
+The backend needs a reachable MongoDB instance; set `DATABASE_URL` in `server/.env`
+(or the repository `.env`). The quickest option is to start just the database from
+Compose, which publishes it on `127.0.0.1:27017`:
+
+```bash
+docker compose up -d mongo
+```
+
 The backend tests use an in-memory MongoDB and do not need one.
 
 ## ❓ How to use

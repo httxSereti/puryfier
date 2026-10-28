@@ -44,6 +44,6 @@ async def close_db() -> None:
     """Cleanly close the MongoDB client."""
     global _client
     if _client is not None:
-        _client.close()
+        await _client.close()
         _client = None
         print("[DB] MongoDB connection closed")
