@@ -33,6 +33,32 @@ cp .env.example .env
 docker compose up -d
 ```
 
+## 🧑‍💻 Development
+
+Requirements: Node.js 22.12+, pnpm 11+ and Python 3.12+ with [uv](https://docs.astral.sh/uv/).
+
+The repository is a [Turborepo](https://turborepo.com) monorepo with two workspaces:
+`front` (React + Vite) and `server` (FastAPI, managed with `uv`).
+
+```bash
+pnpm install   # installs Turborepo and the frontend dependencies
+cp front/.env.example front/.env
+cp server/.env.example server/.env
+pnpm dev       # runs the frontend and backend together
+```
+
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Run the frontend dev server and the backend with reload |
+| `pnpm build` | Build the frontend for production |
+| `pnpm lint` | Lint the frontend |
+| `pnpm test` | Run the backend test suite |
+
+To target a single workspace, use `pnpm --filter server dev` (or `front`).
+
+The backend needs a reachable MongoDB instance; set `DATABASE_URL` in `server/.env`.
+The backend tests use an in-memory MongoDB and do not need one.
+
 ## ❓ How to use
 
 ### Cloudflare

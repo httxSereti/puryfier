@@ -48,8 +48,8 @@ services:
 
   front:
     build:
-      context: ./front
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: front/Dockerfile
     container_name: puryfier-front
     restart: unless-stopped
     environment:

@@ -1,0 +1,7 @@
+packages:
+  - front
+  - server
+
+allowBuilds:
+  esbuild: true
+  workerd: true

@@ -1,0 +1,11 @@
+.git
+.turbo
+node_modules
+**/node_modules
+**/dist
+**/.wrangler
+**/.venv
+**/__pycache__
+**/.pytest_cache
+.env
+**/.env
