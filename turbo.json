@@ -3,7 +3,6 @@
   "globalDependencies": ["front/.env", "server/.env"],
   "globalEnv": [
     "VITE_BACKEND_URL",
-    "VITE_PURYFI_WS_URL",
     "VITE_APP_VERSION"
   ],
   "globalPassThroughEnv": [
@@ -13,6 +12,7 @@
     "CHASTER_WEBHOOK_USER",
     "CHASTER_WEBHOOK_PWD",
     "FRONT_URL",
+    "VITE_HMR_CLIENT_PORT",
     "CLOUDFLARE_API_TOKEN",
     "CLOUDFLARE_ACCOUNT_ID",
     "WRANGLER_*",

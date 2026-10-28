@@ -3,7 +3,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from models.connection import Connection
 from models.connection_manager import manager
 
-router = APIRouter()
+router = APIRouter(prefix="/ws")
 
 
 @router.websocket("/{user_link_token}")

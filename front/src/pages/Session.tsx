@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import axios from "axios";
 
 import type { ChasterExtensionSessionSchema } from "@/types/api";
+import { getBackendUrl } from "@/lib/backend";
 import PuryfiConnection from "@/components/common/sessions/PuryfiConnection";
 import MotdCard from "@/components/common/cards/MotdCard";
 import SessionSettings from "@/components/common/sessions/SessionSettings";
@@ -32,7 +33,7 @@ export default function Session() {
           throw new Error("mainToken not found in parameters.");
         }
 
-        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        const backendUrl = getBackendUrl();
         const response = await axios.get(`${backendUrl}/api/session/${params.mainToken}`);
         setSessionData(response.data);
       } catch (err: any) {

@@ -35,7 +35,7 @@ def rpc_response(request_msg: dict, payload: dict) -> bytes:
 class TestLifecycle:
     def test_unknown_token_is_rejected(self, client):
         with pytest.raises(WebSocketDisconnect) as exc_info:
-            with client.websocket_connect("/no-such-token"):
+            with client.websocket_connect("/ws/no-such-token"):
                 pass
         assert exc_info.value.code == 4004
 
@@ -44,7 +44,7 @@ class TestLifecycle:
     ):
         seed_lock_configuration(link_token="ws-tok-1", session_id=None)
 
-        with client.websocket_connect("/ws-tok-1"):
+        with client.websocket_connect("/ws/ws-tok-1"):
             assert manager.get_by_user_link_token("ws-tok-1") is not None
 
         assert manager.get_by_user_link_token("ws-tok-1") is None
@@ -54,7 +54,7 @@ class TestLifecycle:
     ):
         seed_lock_configuration(link_token="ws-tok-2", session_id=None)
 
-        with client.websocket_connect("/ws-tok-2") as ws:
+        with client.websocket_connect("/ws/ws-tok-2") as ws:
             assert manager.get_by_user_link_token("ws-tok-2") is not None
             ws.send_bytes(b"\xc1")  # 0xc1 is never valid msgpack
             with pytest.raises(WebSocketDisconnect):
@@ -88,7 +88,7 @@ class TestQueueDrain:
 
         received_types: list[str] = []
 
-        with client.websocket_connect("/ws-tok-3") as ws:
+        with client.websocket_connect("/ws/ws-tok-3") as ws:
             ws.send_bytes(msgpack.packb({"type": "ready", "payload": {}, "responseId": 999}))
 
             for _ in range(50):  # bounded pump: never hang the test
@@ -134,7 +134,7 @@ class TestQueueDrain:
             "created_at": "2026-01-01T00:00:01Z",
         })
 
-        with client.websocket_connect("/ws-tok-4") as ws:
+        with client.websocket_connect("/ws/ws-tok-4") as ws:
             ws.send_bytes(msgpack.packb({"type": "ready", "payload": {}, "responseId": 999}))
 
             for _ in range(50):

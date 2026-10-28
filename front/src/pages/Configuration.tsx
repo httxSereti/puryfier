@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import axios from "axios";
 import type { ChasterExtensionConfigurationSchema } from "@/types/chaster";
+import { getBackendUrl } from "@/lib/backend";
 import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
 import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
 
@@ -50,7 +51,7 @@ export default function Configuration() {
 
         tokenRef.current = params.partnerConfigurationToken;
 
-        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        const backendUrl = getBackendUrl();
         const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
         setConfigurationData(response.data);
         configRef.current = response.data;
@@ -86,7 +87,7 @@ export default function Configuration() {
       postToParent("save_loading");
 
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        const backendUrl = getBackendUrl();
 
         await axios.put(
           `${backendUrl}/api/configuration/${tokenRef.current}`,

@@ -1,8 +1,34 @@
+# Two ways to expose Puryfier are supported:
+#
+#   COMPOSE_PROFILES=tunnel   Cloudflare Tunnel (default; no inbound port needed)
+#   COMPOSE_PROFILES=traefik  Traefik + Let's Encrypt (self-hosting)
+#
+# Pick one in .env, then run `docker compose up -d --build`.
+
 services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: puryfier-cloudflared
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      # Remotely-managed tunnel token, see README.
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    # Allows the tunnel to reach dev servers running on the host
+    # (host.docker.internal:5173 / :8000). Harmless in production.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - proxy
+
   traefik:
     image: traefik:v3.6
     container_name: puryfier-traefik
     restart: unless-stopped
+    profiles:
+      - traefik
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -53,16 +79,19 @@ services:
     build:
       context: .
       dockerfile: front/Dockerfile
+      args:
+        # VITE_BACKEND_URL intentionally stays empty in production: the SPA
+        # calls /api and /ws on its own origin.
+        VITE_APP_VERSION: ${APP_VERSION:-0.2.1}
     container_name: puryfier-front
     restart: unless-stopped
-    environment:
-      - VITE_BACKEND_URL=${BACKEND_URL:-https://api.example.com}
-      - VITE_PURYFI_WS_URL=${WEBSOCKET_URL:-wss://api.example.com}
-      - VITE_APP_VERSION=${APP_VERSION:-0.2.1}
     labels:
+      # Only read by Traefik; harmless when the tunnel profile is used.
+      # Lower priority than the server router, which owns /api and /ws.
       - traefik.enable=true
       - traefik.docker.network=puryfier_proxy
-      - traefik.http.routers.front.rule=Host(`${FRONT_DOMAIN}`)
+      - traefik.http.routers.front.rule=Host(`${PUBLIC_DOMAIN:-${FRONT_DOMAIN:-app.example.com}}`)
+      - traefik.http.routers.front.priority=1
       - traefik.http.routers.front.entrypoints=websecure
       - traefik.http.routers.front.tls.certresolver=cf
       - traefik.http.services.front.loadbalancer.server.port=80
@@ -85,13 +114,15 @@ services:
       # Always use the Compose service name inside the container; the host
       # DATABASE_URL in .env points to localhost for local development.
       - DATABASE_URL=mongodb://${MONGO_USER:-puryfi}:${MONGO_PASSWORD:-puryfi}@mongo:27017/puryfi_chaster?authSource=admin
-      - BACKEND_URL=${BACKEND_URL:-https://api.example.com}
-      - FRONT_URL=${FRONT_URL:-https://app.example.com}
-      - WEBSOCKET_URL=${WEBSOCKET_URL:-wss://api.example.com}
+      # Same public origin as the frontend.
+      - FRONT_URL=https://${PUBLIC_DOMAIN:-${FRONT_DOMAIN:-app.example.com}}
     labels:
+      # Forward API and WebSocket traffic directly to the backend, without
+      # going through the front/React container.
       - traefik.enable=true
       - traefik.docker.network=puryfier_proxy
-      - traefik.http.routers.server.rule=Host(`${API_DOMAIN}`)
+      - traefik.http.routers.server.rule=Host(`${PUBLIC_DOMAIN:-${FRONT_DOMAIN:-app.example.com}}`) && (PathPrefix(`/api`) || PathPrefix(`/ws`))
+      - traefik.http.routers.server.priority=100
       - traefik.http.routers.server.entrypoints=websecure
       - traefik.http.routers.server.tls.certresolver=cf
       - traefik.http.services.server.loadbalancer.server.port=8000
@@ -105,4 +136,8 @@ volumes:
 
 networks:
   proxy:
+    # Explicit name so the Traefik label on the front service keeps working
+    # regardless of the Compose project name.
+    name: puryfier_proxy
   internal:
+    name: puryfier_internal

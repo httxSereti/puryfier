@@ -14,23 +14,20 @@ RUN pnpm install --frozen-lockfile --filter front...
 
 COPY front ./front
 
-ARG VITE_BACKEND_URL
-ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+# Optional: leave empty in production to use the current origin (same-origin
+# /api and /ws through nginx). Local Docker builds may override it.
+ARG VITE_BACKEND_URL=
+ARG VITE_APP_VERSION
+
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL \
+    VITE_APP_VERSION=$VITE_APP_VERSION
 
 RUN pnpm --filter front build
 
 FROM nginx:alpine
 
+COPY front/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/front/dist /usr/share/nginx/html
-
-RUN echo 'server { \
-    listen 80; \
-    location / { \
-    root /usr/share/nginx/html; \
-    index index.html index.htm; \
-    try_files $uri $uri/ /index.html; \
-    } \
-    }' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
