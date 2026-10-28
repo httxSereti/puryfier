@@ -1,14 +1,24 @@
-import { Snowflake, Unlock } from "lucide-react";
-import type { ChasterExtensionConfigSchema } from "@/types/chaster";
+import { SlidersHorizontal, Snowflake, Unlock } from "lucide-react";
+
 import ConfigurationSwitch from "@/components/common/configuration/ConfigurationSwitch";
+import SectionCard from "@/components/ui/section-card";
+import StatusPill from "@/components/ui/status-pill";
+import type { ChasterExtensionConfigSchema } from "@/types/chaster";
 
 interface GeneralConfigurationOptionsProps {
     config: ChasterExtensionConfigSchema;
-    onChange: (updatedConfig: ChasterExtensionConfigSchema) => void;
+    onChange?: (updatedConfig: ChasterExtensionConfigSchema) => void;
+    readOnly?: boolean;
 }
 
-export default function GeneralConfigurationOptions({ config, onChange }: GeneralConfigurationOptionsProps) {
-    const handleToggle = (field: keyof ChasterExtensionConfigSchema) => {
+export default function GeneralConfigurationOptions({
+    config,
+    onChange,
+    readOnly = false,
+}: GeneralConfigurationOptionsProps) {
+    const handleToggle = (field: "lock_on_freeze" | "unlock_on_unfreeze") => {
+        if (readOnly || !onChange) return;
+
         onChange({
             ...config,
             [field]: !config[field],
@@ -16,28 +26,34 @@ export default function GeneralConfigurationOptions({ config, onChange }: Genera
     };
 
     return (
-        <div className="flex flex-col gap-4 mt-4 w-full">
-            <h6 className="text-xs font-mono tracking-tight text-gray-500">
-                General
-            </h6>
+        <SectionCard
+            icon={<SlidersHorizontal />}
+            title="General"
+            description="Automation tied to Chaster lock events."
+            accent="cyan"
+            action={readOnly ? <StatusPill tone="neutral">Read only</StatusPill> : null}
+        >
+            <div className="flex flex-col gap-3">
+                <ConfigurationSwitch
+                    icon={<Snowflake />}
+                    title="Lock on freeze"
+                    description="Automatically lock Puryfi when the Chaster lock is frozen."
+                    checked={config.lock_on_freeze}
+                    onChange={() => handleToggle("lock_on_freeze")}
+                    baseColor="cyan"
+                    disabled={readOnly}
+                />
 
-            <ConfigurationSwitch
-                icon={<Snowflake className="w-5 h-5 text-cyan-400" />}
-                title="Lock on Freeze"
-                description="Automatically lock Puryfi when lock is frozen"
-                checked={config.lock_on_freeze}
-                onChange={() => handleToggle("lock_on_freeze")}
-                baseColor="cyan"
-            />
-
-            <ConfigurationSwitch
-                icon={<Unlock className="w-5 h-5 text-emerald-400" />}
-                title="Unlock on Unfreeze"
-                description="Automatically unlock Puryfi when unfreezing"
-                checked={config.unlock_on_unfreeze}
-                onChange={() => handleToggle("unlock_on_unfreeze")}
-                baseColor="emerald"
-            />
-        </div>
+                <ConfigurationSwitch
+                    icon={<Unlock />}
+                    title="Unlock on unfreeze"
+                    description="Automatically unlock Puryfi when the Chaster lock is unfrozen."
+                    checked={config.unlock_on_unfreeze}
+                    onChange={() => handleToggle("unlock_on_unfreeze")}
+                    baseColor="emerald"
+                    disabled={readOnly}
+                />
+            </div>
+        </SectionCard>
     );
 }

@@ -1,19 +1,24 @@
-export default function MotdCard() {
+import { Info } from "lucide-react";
 
+import StatusPill from "@/components/ui/status-pill";
+
+export default function MotdCard() {
     return (
-        <div className="w-full bg-cyan-950/40 border border-cyan-800/50 rounded-2xl p-4 flex items-center justify-between shadow-lg backdrop-blur-sm">
-            <div className="flex items-center gap-4">
-                <div className="p-3 bg-cyan-900/50 rounded-xl shadow-inner">
-                    <span className="text-xl">✨</span>
-                </div>
-                <div>
-                    <h2 className="font-bold text-cyan-50 text-sm sm:text-base">Information</h2>
-                    <p className="text-xs sm:text-sm text-cyan-200/80">The extension is currently in development. Some features may not work as expected.</p>
-                </div>
+        <div className="flex items-start gap-3 rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.06] px-4 py-3.5 shadow-lg shadow-black/10 sm:items-center">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                <Info className="size-4" />
             </div>
-            {/* <button className="text-cyan-400 hover:text-cyan-300 text-sm font-semibold px-4 py-2 bg-cyan-950/50 rounded-lg border border-cyan-800/50 transition-colors hidden sm:block">
-                More information
-            </button> */}
+
+            <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-cyan-100">Puryfier is in development</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-cyan-100/60">
+                    Some features may not work as expected. Thanks for testing!
+                </p>
+            </div>
+
+            <StatusPill tone="info" className="hidden sm:inline-flex">
+                Beta
+            </StatusPill>
         </div>
-    )
+    );
 }

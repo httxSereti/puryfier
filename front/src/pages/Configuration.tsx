@@ -1,188 +1,275 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, ShieldCheck } from "lucide-react";
 import axios from "axios";
-import type { ChasterExtensionConfigurationSchema } from "@/types/chaster";
-import { getBackendUrl } from "@/lib/backend";
+import { Check, Link2, LockKeyhole, Settings2, ShieldCheck, Unplug } from "lucide-react";
+
 import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
 import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
+import ConfigurationSkeleton from "@/components/common/configuration/ConfigurationSkeleton";
+import PageHeader from "@/components/common/layout/PageHeader";
+import PageShell from "@/components/common/layout/PageShell";
+import ErrorAlert from "@/components/ui/error-alert";
+import StatusPill from "@/components/ui/status-pill";
+import { getBackendUrl } from "@/lib/backend";
+import { getApiErrorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
+import type {
+    ChasterExtensionConfigSchema,
+    ChasterExtensionConfigurationSchema,
+} from "@/types/chaster";
 
 const CHASTER_ORIGIN = "https://chaster.app";
 
 function postToParent(event: string, payload?: object) {
-  window.parent.postMessage(
-    JSON.stringify({ type: "partner_configuration", event, ...(payload ? { payload } : {}) }),
-    CHASTER_ORIGIN
-  );
+    window.parent.postMessage(
+        JSON.stringify({ type: "partner_configuration", event, ...(payload ? { payload } : {}) }),
+        CHASTER_ORIGIN,
+    );
 }
 
 export default function Configuration() {
-  const [configurationData, setConfigurationData] = useState<ChasterExtensionConfigurationSchema | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+    const [configurationData, setConfigurationData] = useState<ChasterExtensionConfigurationSchema | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isDirty, setIsDirty] = useState(false);
 
-  // Keep a mutable ref to the latest config & token so the event listener always has fresh values
-  const configRef = useRef<ChasterExtensionConfigurationSchema | null>(null);
-  const tokenRef = useRef<string>("");
-  const hasFetched = useRef(false);
+    // Keep a mutable ref to the latest config & token so the event listener always has fresh values
+    const configRef = useRef<ChasterExtensionConfigurationSchema | null>(null);
+    const tokenRef = useRef<string>("");
+    const hasFetched = useRef(false);
 
-  useEffect(() => {
-    postToParent("capabilities", { features: { save: true } });
-  }, []);
+    useEffect(() => {
+        postToParent("capabilities", { features: { save: true } });
+    }, []);
 
-  useEffect(() => {
-    // Don't fetch session twice (react strict mode re-renders the component on development)
-    if (hasFetched.current)
-      return;
+    useEffect(() => {
+        // Don't fetch session twice (react strict mode re-renders the component on development)
+        if (hasFetched.current) return;
 
-    hasFetched.current = true;
+        hasFetched.current = true;
 
-    const fetchSession = async () => {
-      try {
-        if (!window.location.hash) {
-          throw new Error("No login token detected in URL.");
-        }
+        const fetchSession = async () => {
+            try {
+                if (!window.location.hash) {
+                    throw new Error("No login token detected in URL.");
+                }
 
-        const hash = window.location.hash.substring(1);
-        const params = JSON.parse(decodeURIComponent(hash));
+                const hash = window.location.hash.substring(1);
+                const params = JSON.parse(decodeURIComponent(hash));
 
-        if (!params.partnerConfigurationToken) {
-          throw new Error("partnerConfigurationToken not found in parameters.");
-        }
+                if (!params.partnerConfigurationToken) {
+                    throw new Error("partnerConfigurationToken not found in parameters.");
+                }
 
-        tokenRef.current = params.partnerConfigurationToken;
+                tokenRef.current = params.partnerConfigurationToken;
 
-        const backendUrl = getBackendUrl();
-        const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
-        setConfigurationData(response.data);
-        configRef.current = response.data;
-      } catch (err: any) {
-        if (axios.isAxiosError(err)) {
-          setError(err.response?.data?.detail || "Error syncing with local server.");
-        } else {
-          setError(err.message || "Error parsing parameters");
-        }
-      } finally {
-        setIsLoading(false);
-      }
+                const backendUrl = getBackendUrl();
+                const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
+                setConfigurationData(response.data);
+                configRef.current = response.data;
+            } catch (err: unknown) {
+                setError(getApiErrorMessage(err, "Error syncing with the local server."));
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchSession();
+    }, []);
+
+    useEffect(() => {
+        const handleMessage = async (e: MessageEvent) => {
+            // Only act on messages from the Chaster host page (REVIEW.md #7)
+            if (e.origin !== CHASTER_ORIGIN || typeof e.data !== "string") return;
+
+            let parsed: { type?: string; event?: string };
+            try {
+                parsed = JSON.parse(e.data);
+            } catch {
+                return;
+            }
+
+            if (parsed.type !== "chaster" || parsed.event !== "partner_configuration_save") return;
+
+            // Show spinner on the Chaster modal
+            postToParent("save_loading");
+            setError(null);
+
+            try {
+                const backendUrl = getBackendUrl();
+
+                await axios.put(
+                    `${backendUrl}/api/configuration/${tokenRef.current}`,
+                    configRef.current?.config ?? {},
+                );
+
+                setIsDirty(false);
+
+                // Signal success — Chaster will close the modal
+                postToParent("save_success");
+            } catch (err: unknown) {
+                // Stop spinner and keep modal open
+                postToParent("save_failed");
+                setError(getApiErrorMessage(err, "Save failed. Please try again."));
+            }
+        };
+
+        window.addEventListener("message", handleMessage);
+        return () => window.removeEventListener("message", handleMessage);
+    }, []);
+
+    const handleConfigChange = (updatedConfig: ChasterExtensionConfigSchema) => {
+        const current = configRef.current;
+        if (!current) return;
+
+        const next = { ...current, config: updatedConfig };
+        configRef.current = next;
+        setConfigurationData(next);
+        setIsDirty(true);
     };
 
-    fetchSession();
-  }, []);
+    return (
+        <PageShell className="max-w-3xl">
+            <PageHeader
+                subtitle="Choose how Puryfier behaves inside your Chaster lock."
+                version={import.meta.env.VITE_APP_VERSION}
+            >
+                {configurationData ? (
+                    <StatusPill
+                        tone={
+                            configurationData.role === "wearer"
+                                ? "wearer"
+                                : configurationData.role === "keyholder"
+                                    ? "keyholder"
+                                    : "neutral"
+                        }
+                    >
+                        {configurationData.role}
+                    </StatusPill>
+                ) : null}
+            </PageHeader>
 
-  useEffect(() => {
-    const handleMessage = async (e: MessageEvent) => {
-      // Only act on messages from the Chaster host page (REVIEW.md #7)
-      if (e.origin !== CHASTER_ORIGIN || typeof e.data !== "string") return;
+            {error ? <ErrorAlert message={error} /> : null}
 
-      let parsed: { type?: string; event?: string };
-      try {
-        parsed = JSON.parse(e.data);
-      } catch {
-        return;
-      }
+            {isLoading ? (
+                <ConfigurationSkeleton />
+            ) : configurationData ? (
+                <>
+                    <ConnectionStatus data={configurationData} />
 
-      if (parsed.type !== "chaster" || parsed.event !== "partner_configuration_save") return;
+                    {configurationData.config ? (
+                        <div className="flex flex-col gap-5">
+                            <GeneralConfigurationOptions
+                                config={configurationData.config}
+                                onChange={handleConfigChange}
+                            />
 
-      // Show spinner on the Chaster modal
-      postToParent("save_loading");
+                            <CensoredMediaOptions
+                                config={configurationData.config}
+                                onChange={handleConfigChange}
+                            />
+                        </div>
+                    ) : (
+                        <EmptyConfiguration />
+                    )}
 
-      try {
-        const backendUrl = getBackendUrl();
+                    <footer className="flex flex-col gap-2 px-1 pt-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="inline-flex items-center gap-1.5">
+                            <ShieldCheck className="size-3.5" />
+                            Changes are saved to Chaster when you confirm.
+                        </span>
 
-        await axios.put(
-          `${backendUrl}/api/configuration/${tokenRef.current}`,
-          configRef.current?.config ?? {},
-        );
+                        {isDirty ? (
+                            <StatusPill tone="warning" dot>
+                                Unsaved changes
+                            </StatusPill>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                                <Check className="size-3.5 text-emerald-400/80" />
+                                Up to date
+                            </span>
+                        )}
+                    </footer>
+                </>
+            ) : (
+                <EmptyConfiguration />
+            )}
+        </PageShell>
+    );
+}
 
-        // Signal success — Chaster will close the modal
-        postToParent("save_success");
-      } catch (err: any) {
-        // Stop spinner and keep modal open
-        postToParent("save_failed");
-        const detail = axios.isAxiosError(err)
-          ? err.response?.data?.detail || "Save failed."
-          : "Unexpected error.";
-        setError(detail);
-      }
-    };
+function ConnectionStatus({ data }: { data: ChasterExtensionConfigurationSchema }) {
+    const isOnline = data.is_online;
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
+    const tone = isOnline
+        ? "online"
+        : !data.has_session
+            ? "neutral"
+            : data.has_linked_plugin
+                ? "offline"
+                : "warning";
 
+    const label = isOnline ? "Online" : !data.has_session ? "No session" : data.has_linked_plugin ? "Offline" : "Not linked";
 
-  return (
-    <div className="flex flex-col w-full min-h-screen bg-[#2a2736] text-slate-100 p-4 sm:p-8 font-sans">
-      <div className="flex flex-col items-center text-center space-y-6 max-w-3xl mx-auto w-full">
+    const title = isOnline
+        ? "Puryfi is connected"
+        : !data.has_session
+            ? "No active lock session"
+            : data.has_linked_plugin
+                ? "Puryfi is offline"
+                : "Puryfi is not linked";
 
-        <div className="p-4 bg-cyan-950/30 rounded-full border border-cyan-900/50 shadow-inner">
-          <svg className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-        </div>
+    const description = isOnline
+        ? "Puryfi is linked to this lock and listening for censorship events."
+        : !data.has_session
+            ? "These preferences will apply the next time the extension is used with a lock."
+            : data.has_linked_plugin
+                ? "The Puryfi plugin is registered, but the WebSocket connection is currently inactive."
+                : "Open the extension page from your lock to generate a WebSocket URL and link Puryfi.";
 
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            Puryfier [v{import.meta.env.VITE_APP_VERSION}]
-          </h1>
-        </div>
+    const Icon = isOnline ? Link2 : data.has_session ? Unplug : LockKeyhole;
 
-        {error ? (
-          <div className="w-full p-4 bg-red-950/50 border border-red-900/50 rounded-xl">
-            <p className="text-sm text-red-400 font-medium">{error}</p>
-          </div>
-        ) : null}
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-6 space-y-4">
-            <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-            <p className="text-sm text-slate-400 animate-pulse">Fetching session...</p>
-          </div>
-        ) : configurationData ? (
-          <div className="w-full space-y-4">
-            {configurationData.has_session ? (
-              <div className="w-full p-4 flex justify-between bg-slate-950 border border-slate-800 rounded-xl space-y-3 items-center">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-slate-400" />
-                  <p className="text-sm font-semibold text-slate-200">Puryfi Status:</p>
-                  {configurationData.is_online ? (
-                    <span className="text-sm font-semibold text-emerald-400">Online</span>
-                  ) : (
-                    <span className="text-sm font-semibold text-red-400">Offline</span>
-                  )}
+    return (
+        <div className="flex items-start gap-3.5 rounded-2xl border border-white/[0.07] bg-[#17151F]/90 p-4 shadow-xl shadow-black/20 backdrop-blur sm:items-center sm:p-5">
+            <div
+                className={cn(
+                    "flex size-11 shrink-0 items-center justify-center rounded-2xl border [&>svg]:size-5",
+                    isOnline
+                        ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                        : !data.has_session
+                            ? "border-white/10 bg-white/[0.04] text-slate-400"
+                            : data.has_linked_plugin
+                                ? "border-red-400/20 bg-red-400/10 text-red-300"
+                                : "border-amber-400/20 bg-amber-400/10 text-amber-300",
+                )}
+            >
+                <Icon />
+            </div>
+
+            <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-white">{title}</p>
+                    <StatusPill tone={tone} dot={tone !== "neutral"} pulse={isOnline}>
+                        {label}
+                    </StatusPill>
                 </div>
-              </div>
-            ) : null}
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">{description}</p>
+            </div>
+        </div>
+    );
+}
 
-            <GeneralConfigurationOptions
-              config={configurationData.config}
-              onChange={(updatedConfig) => {
-                setConfigurationData({
-                  ...configurationData,
-                  config: updatedConfig
-                });
-                configRef.current = {
-                  ...configurationData,
-                  config: updatedConfig
-                };
-              }}
-            />
-
-            <CensoredMediaOptions
-              config={configurationData.config}
-              onChange={(updatedConfig) => {
-                setConfigurationData({
-                  ...configurationData,
-                  config: updatedConfig
-                });
-                configRef.current = {
-                  ...configurationData,
-                  config: updatedConfig
-                };
-              }}
-            />
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
+function EmptyConfiguration() {
+    return (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.07] bg-[#17151F]/90 px-4 py-14 text-center shadow-xl shadow-black/20">
+            <div className="flex size-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-400">
+                <Settings2 className="size-5" />
+            </div>
+            <div>
+                <p className="text-sm font-semibold text-white">No configuration available</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                    This extension did not return any settings for this session.
+                </p>
+            </div>
+        </div>
+    );
 }

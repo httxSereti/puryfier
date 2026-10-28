@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { Copy, Check, Key, Loader2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Copy, KeyRound, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import axios from "axios";
+
 import { copyText } from "@/lib/clipboard";
 import { getBackendUrl, getPuryfiWebSocketUrl } from "@/lib/backend";
+import { getApiErrorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 interface LinkTokenModalProps {
     linkToken: string | null;
@@ -17,10 +20,23 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                onClose();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
     const handleCopy = async () => {
         if (!token) return;
+
         setCopyFailed(false);
         const ok = await copyText(getPuryfiWebSocketUrl(token));
+
         if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
@@ -33,11 +49,13 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
     const handleCreate = async () => {
         setIsCreating(true);
         setError(null);
+
         try {
             // The link-token endpoint authenticates with the Chaster-issued
             // mainToken from the iframe URL (REVIEW.md #8).
             const hash = window.location.hash.substring(1);
             const params = JSON.parse(decodeURIComponent(hash));
+
             if (!params.mainToken) {
                 throw new Error("mainToken not found in parameters.");
             }
@@ -45,14 +63,11 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
             const backendUrl = getBackendUrl();
             const response = await axios.post(`${backendUrl}/api/session/${params.mainToken}/link-token`);
             const newToken: string = response.data.link_token;
+
             setToken(newToken);
             onTokenCreated(newToken);
         } catch (err: unknown) {
-            setError(
-                axios.isAxiosError(err)
-                    ? err.response?.data?.detail || "Failed to create token."
-                    : "Unexpected error."
-            );
+            setError(getApiErrorMessage(err, "Failed to create token."));
         } finally {
             setIsCreating(false);
         }
@@ -60,71 +75,113 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="relative mx-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 space-y-5"
-                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="link-token-title"
+                className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#17151F] shadow-2xl shadow-black/50"
+                onClick={(event) => event.stopPropagation()}
             >
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Key className="w-5 h-5 text-cyan-400" />
-                        <h2 className="text-base font-semibold text-slate-100">WebSocket URL</h2>
+                <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-9 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                            <KeyRound className="size-4" />
+                        </div>
+                        <div>
+                            <h2 id="link-token-title" className="text-sm font-semibold text-white">
+                                WebSocket URL
+                            </h2>
+                            <p className="text-xs text-slate-400">Connect Puryfi to this lock.</p>
+                        </div>
                     </div>
+
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="text-slate-500 hover:text-slate-300 transition-colors"
+                        aria-label="Close dialog"
+                        title="Close"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="size-4" />
                     </button>
                 </div>
 
-                {token ? (
-                    <div className="space-y-3">
-                        <p className="text-xs text-slate-400">
-                            Use this WebSocket URL to connect Puryfi with Puryfier
-                        </p>
-                        <button
-                            onClick={handleCopy}
-                            className="group w-full flex items-center justify-between gap-3 bg-slate-950 border border-slate-700 hover:border-cyan-700 rounded-xl px-4 py-3 transition-colors"
-                        >
-                            <div className="text-sm font-mono text-cyan-300 truncate select-all">{getPuryfiWebSocketUrl(token)}</div>
-                            {copied
-                                ? <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                                : <Copy className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 shrink-0 transition-colors" />
-                            }
-                        </button>
-                        {copyFailed ? (
-                            <p className="text-xs text-amber-400 text-center">
-                                Copy blocked by the browser — select the URL and copy it manually.
+                <div className="space-y-4 px-5 py-5">
+                    {token ? (
+                        <>
+                            <p className="text-xs leading-relaxed text-slate-400">
+                                Paste this URL into a WebSocket plugin in Puryfi. Puryfi will connect
+                                automatically after saving.
                             </p>
-                        ) : (
-                            <p className="text-xs text-slate-500 text-center">Click the box to copy</p>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        <p className="text-xs text-slate-400">
-                            Generate a WebSocket URL to connect your Chaster lock with Puryfi.
-                        </p>
-                        {error && (
-                            <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/40 rounded-lg px-3 py-2">
-                                {error}
+
+                            <div className="rounded-xl border border-white/10 bg-[#0F0E16] p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <code className="min-w-0 break-all text-xs font-mono leading-relaxed text-cyan-300 select-all">
+                                        {getPuryfiWebSocketUrl(token)}
+                                    </code>
+                                    <button
+                                        type="button"
+                                        onClick={handleCopy}
+                                        aria-label="Copy WebSocket URL"
+                                        title="Copy WebSocket URL"
+                                        className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-400 transition-colors hover:border-emerald-400/20 hover:bg-emerald-400/10 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                                    >
+                                        {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <p
+                                aria-live="polite"
+                                className={cn(
+                                    "text-center text-[11px] leading-relaxed",
+                                    copyFailed ? "text-amber-400" : copied ? "text-emerald-400" : "text-slate-500",
+                                )}
+                            >
+                                {copyFailed
+                                    ? "Copy blocked by the browser — select the URL and copy it manually."
+                                    : copied
+                                        ? "Copied to clipboard."
+                                        : "Keep this URL private: anyone with it can connect to this lock."}
                             </p>
-                        )}
-                        <button
-                            onClick={handleCreate}
-                            disabled={isCreating}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
-                        >
-                            {isCreating
-                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
-                                : <><Key className="w-4 h-4" /> Generate WebSocket URL</>
-                            }
-                        </button>
-                    </div>
-                )}
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-xs leading-relaxed text-slate-400">
+                                Generate a unique WebSocket URL for this lock, then register it in Puryfi.
+                            </p>
+
+                            {error ? (
+                                <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-400/[0.07] px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
+                                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                                    {error}
+                                </div>
+                            ) : null}
+
+                            <button
+                                type="button"
+                                onClick={handleCreate}
+                                disabled={isCreating}
+                                className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/15 transition-colors hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#17151F] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isCreating ? (
+                                    <>
+                                        <LoaderCircle className="size-4 animate-spin" />
+                                        Generating…
+                                    </>
+                                ) : (
+                                    <>
+                                        <KeyRound className="size-4" />
+                                        Generate WebSocket URL
+                                    </>
+                                )}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -19,10 +19,10 @@ export interface LockForPublic {
   limitLockTime: boolean;
   combination: string;
   hideTimeLogs: boolean;
-  user: any;
-  keyholder: any | null;
-  sharedLock: any | null;
-  extensions: any[];
+  user: unknown;
+  keyholder: unknown | null;
+  sharedLock: unknown | null;
+  extensions: unknown[];
 }
 
 export interface PartnerSession {
@@ -32,10 +32,10 @@ export interface PartnerSession {
   summary: string;
   subtitle: string;
   icon: string;
-  config: any;
+  config: unknown;
   mode: string;
   regularity: number;
-  userData: any | null;
+  userData: unknown | null;
   nbActionsRemaining: number;
   lock: LockForPublic;
 }
