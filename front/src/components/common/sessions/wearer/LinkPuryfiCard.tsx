@@ -60,7 +60,7 @@ export default function LinkPuryfiCard({ session }: { session: ChasterExtensionS
                         <Step index={3}>
                             Add a <span className="text-cyan-300">WebSocket</span> plugin and paste the URL.
                         </Step>
-                        <Step index={4}>Save the plugin, then refresh this page.</Step>
+                        <Step index={4}>Save the plugin — this page updates automatically.</Step>
                     </ol>
 
                     <Button

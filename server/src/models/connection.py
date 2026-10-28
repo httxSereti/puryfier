@@ -210,10 +210,16 @@ class Connection:
             send, and start draining only after intents are granted.
         """
 
+        from models.connection_manager import manager
         from services.link import link_with_token
 
         if not await link_with_token(user_link_token):
             return
+
+        # The Puryfi handshake completed: tell the extension UI that the
+        # plugin is now linked, without waiting for a page refresh.
+        self.user_lock_config.has_linked_plugin = True
+        await manager.publish_status(self)
 
         # Queued messages (setState, enterLockPassword, ...) require intents;
         # wait until they are granted before draining.

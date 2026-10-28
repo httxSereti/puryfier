@@ -4,6 +4,7 @@ import axios from "axios";
 
 import { copyText } from "@/lib/clipboard";
 import { getBackendUrl, getPuryfiWebSocketUrl } from "@/lib/backend";
+import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
@@ -53,15 +54,14 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
         try {
             // The link-token endpoint authenticates with the Chaster-issued
             // mainToken from the iframe URL (REVIEW.md #8).
-            const hash = window.location.hash.substring(1);
-            const params = JSON.parse(decodeURIComponent(hash));
+            const { mainToken } = readChasterIframeParams();
 
-            if (!params.mainToken) {
+            if (!mainToken) {
                 throw new Error("mainToken not found in parameters.");
             }
 
             const backendUrl = getBackendUrl();
-            const response = await axios.post(`${backendUrl}/api/session/${params.mainToken}/link-token`);
+            const response = await axios.post(`${backendUrl}/api/session/${mainToken}/link-token`);
             const newToken: string = response.data.link_token;
 
             setToken(newToken);

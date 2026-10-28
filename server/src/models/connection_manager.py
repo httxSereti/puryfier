@@ -1,6 +1,8 @@
-from typing import Self
+from typing import Any, Self
 
 from models.connection import Connection
+from models.documents.user_lock_configuration import UserLockConfiguration
+from models.session_watchers import watchers
 from schemas import ChasterExtensionConfigSchema
 
 
@@ -18,14 +20,45 @@ class ConnectionManager:
     def connections(self) -> list[Connection]:
         return list(self._connections.values())
 
-    def add(self, connection: Connection, user_link_token: str) -> None:
+    async def add(self, connection: Connection, user_link_token: str) -> None:
         self._connections[user_link_token] = connection
+        await self.publish_status(connection)
 
-    def remove(self, user_link_token: str) -> None:
+    async def remove(self, user_link_token: str, connection: Connection | None = None) -> None:
+        current = self._connections.get(user_link_token)
+        if current is None:
+            return
+
+        # A new Puryfi connection can replace the previous one for the same
+        # token before the old socket finishes closing. Only the connection
+        # that is still registered may take itself down.
+        if connection is not None and current is not connection:
+            return
+
         self._connections.pop(user_link_token, None)
+        await self.publish_status(connection or current)
 
     def get_by_user_link_token(self, user_link_token: str) -> Connection | None:
         return self._connections.get(user_link_token)
+
+    def status_for_lock_config(self, lock_config: UserLockConfiguration) -> dict[str, Any]:
+        """Current Puryfi link status, shaped for the extension UI sockets."""
+        return {
+            "type": "status",
+            "is_online": self.get_by_user_link_token(lock_config.link_token or "") is not None,
+            "has_linked_plugin": lock_config.has_linked_plugin,
+        }
+
+    async def publish_status(self, connection: Connection) -> None:
+        """Push the current status to every browser watching this session."""
+        session_id = connection.user_lock_config.session_id
+        if not session_id:
+            return
+
+        await watchers.broadcast(
+            session_id,
+            self.status_for_lock_config(connection.user_lock_config),
+        )
 
     def update_cached_config(self, user_link_token: str, config: ChasterExtensionConfigSchema) -> None:
         """Update the in-memory config of a live connection (REVIEW.md #17:

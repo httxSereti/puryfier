@@ -17,3 +17,14 @@ export function getBackendUrl(): string {
 export function getPuryfiWebSocketUrl(token: string): string {
     return `${getBackendUrl().replace(/^http/, "ws")}/ws/${token}`;
 }
+
+/**
+ * Realtime status channel used by the extension UI to follow the Puryfi link.
+ * `channel` selects the credential used to authenticate the socket.
+ */
+export function getPuryfiStatusWebSocketUrl(
+    channel: "session" | "configuration",
+    token: string,
+): string {
+    return `${getBackendUrl().replace(/^http/, "ws")}/ws/${channel}/${encodeURIComponent(token)}`;
+}

@@ -11,3 +11,11 @@ export interface ChasterExtensionSessionSchema {
     config: ChasterExtensionConfigSchema | null;
     lock_password: string | null;
 }
+
+/**
+ * Payload pushed by the backend's realtime status channel.
+ */
+export interface PuryfiRealtimeStatus {
+    is_online: boolean;
+    has_linked_plugin: boolean;
+}

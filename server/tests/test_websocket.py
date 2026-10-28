@@ -11,6 +11,8 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from models.connection_manager import manager
+from models.session_watchers import watchers
+from utils import chaster_api
 
 INTENTS = [
     "readUserState",
@@ -22,10 +24,12 @@ INTENTS = [
 
 @pytest.fixture(autouse=True)
 def clean_manager():
-    """The ConnectionManager is a process-wide singleton: isolate tests."""
+    """The ConnectionManager and watchers are process-wide singletons: isolate tests."""
     manager._connections.clear()
+    watchers._watchers.clear()
     yield
     manager._connections.clear()
+    watchers._watchers.clear()
 
 
 def rpc_response(request_msg: dict, payload: dict) -> bytes:
@@ -164,3 +168,146 @@ class TestQueueDrain:
             time.sleep(0.01)
         # Not delivered => must still be queued for the next reconnect.
         assert mongo_db["queued_messages"].count_documents({"link_token": "ws-tok-4"}) == 1
+
+
+class TestRealtimeStatus:
+    """The extension UI follows the Puryfi link without reloading the page."""
+
+    def test_session_watcher_sees_connect_and_disconnect(
+        self, client, seed_lock_configuration, monkeypatch
+    ):
+        seed_lock_configuration(session_id="realtime-session", link_token="rt-token")
+
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "realtime-session"}}
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+
+        with client.websocket_connect("/ws/session/main-token") as watcher:
+            assert watcher.receive_json() == {
+                "type": "status",
+                "is_online": False,
+                "has_linked_plugin": True,
+            }
+
+            with client.websocket_connect("/ws/rt-token"):
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": True,
+                    "has_linked_plugin": True,
+                }
+
+            assert watcher.receive_json() == {
+                "type": "status",
+                "is_online": False,
+                "has_linked_plugin": True,
+            }
+
+    def test_watcher_gets_current_status_when_puryfi_is_already_online(
+        self, client, seed_lock_configuration, monkeypatch
+    ):
+        seed_lock_configuration(session_id="realtime-session", link_token="rt-token")
+
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "realtime-session"}}
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+
+        with (
+            client.websocket_connect("/ws/rt-token"),
+            client.websocket_connect("/ws/session/main-token") as watcher,
+        ):
+            assert watcher.receive_json() == {
+                "type": "status",
+                "is_online": True,
+                "has_linked_plugin": True,
+            }
+
+    def test_plugin_handshake_marks_plugin_as_linked(
+        self, client, seed_lock_configuration, monkeypatch
+    ):
+        seed_lock_configuration(
+            session_id="realtime-session",
+            link_token="rt-token",
+            has_linked_plugin=False,
+        )
+
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "realtime-session"}}
+
+        async def fake_create_custom_log(*_args, **_kwargs) -> bool:
+            return True
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+        monkeypatch.setattr("services.link.create_custom_log", fake_create_custom_log)
+
+        with client.websocket_connect("/ws/session/main-token") as watcher:
+            assert watcher.receive_json() == {
+                "type": "status",
+                "is_online": False,
+                "has_linked_plugin": False,
+            }
+
+            with client.websocket_connect("/ws/rt-token") as puryfi:
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": True,
+                    "has_linked_plugin": False,
+                }
+
+                puryfi.send_bytes(
+                    msgpack.packb({"type": "ready", "payload": {}, "responseId": 999})
+                )
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": True,
+                    "has_linked_plugin": True,
+                }
+
+            assert watcher.receive_json() == {
+                "type": "status",
+                "is_online": False,
+                "has_linked_plugin": True,
+            }
+
+    def test_configuration_watcher_receives_status(
+        self, client, seed_lock_configuration, monkeypatch
+    ):
+        seed_lock_configuration(session_id="realtime-session", link_token="rt-token")
+
+        class FakeResponse:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict:
+                return {"sessionId": "realtime-session", "role": "wearer"}
+
+        class FakeChasterClient:
+            async def get(self, _url: str) -> FakeResponse:
+                return FakeResponse()
+
+            async def aclose(self) -> None:
+                pass
+
+        monkeypatch.setattr(chaster_api, "chaster_client", FakeChasterClient())
+
+        with client.websocket_connect("/ws/configuration/config-token") as watcher:
+            assert watcher.receive_json() == {
+                "type": "status",
+                "is_online": False,
+                "has_linked_plugin": True,
+            }
+
+    def test_unknown_session_is_rejected(self, client, monkeypatch):
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "missing-session"}}
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+
+        with (
+            pytest.raises(WebSocketDisconnect) as exc_info,
+            client.websocket_connect("/ws/session/main-token"),
+        ):
+            pass
+
+        assert exc_info.value.code == 4004

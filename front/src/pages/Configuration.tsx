@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Check, Link2, LockKeyhole, Settings2, ShieldCheck, Unplug } from "lucide-react";
 
@@ -9,7 +9,9 @@ import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
+import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
 import { getBackendUrl } from "@/lib/backend";
+import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type {
@@ -36,6 +38,18 @@ export default function Configuration() {
     const configRef = useRef<ChasterExtensionConfigurationSchema | null>(null);
     const tokenRef = useRef<string>("");
     const hasFetched = useRef(false);
+    const { partnerConfigurationToken } = useMemo(() => readChasterIframeParams(), []);
+
+    // Subscribe only once the REST call has created the lock configuration:
+    // opening the socket before that would race the session lookup.
+    const realtimeStatus = usePuryfiRealtimeStatus(
+        "configuration",
+        configurationData?.has_session ? (partnerConfigurationToken ?? null) : null,
+    );
+
+    const liveConfigurationData: ChasterExtensionConfigurationSchema | null = configurationData
+        ? { ...configurationData, ...(realtimeStatus ?? {}) }
+        : null;
 
     useEffect(() => {
         postToParent("capabilities", { features: { save: true } });
@@ -53,17 +67,14 @@ export default function Configuration() {
                     throw new Error("No login token detected in URL.");
                 }
 
-                const hash = window.location.hash.substring(1);
-                const params = JSON.parse(decodeURIComponent(hash));
-
-                if (!params.partnerConfigurationToken) {
+                if (!partnerConfigurationToken) {
                     throw new Error("partnerConfigurationToken not found in parameters.");
                 }
 
-                tokenRef.current = params.partnerConfigurationToken;
+                tokenRef.current = partnerConfigurationToken;
 
                 const backendUrl = getBackendUrl();
-                const response = await axios.get(`${backendUrl}/api/configuration/${params.partnerConfigurationToken}`);
+                const response = await axios.get(`${backendUrl}/api/configuration/${partnerConfigurationToken}`);
                 setConfigurationData(response.data);
                 configRef.current = response.data;
             } catch (err: unknown) {
@@ -74,7 +85,7 @@ export default function Configuration() {
         };
 
         fetchSession();
-    }, []);
+    }, [partnerConfigurationToken]);
 
     useEffect(() => {
         const handleMessage = async (e: MessageEvent) => {
@@ -133,17 +144,17 @@ export default function Configuration() {
                 subtitle="Choose how Puryfier behaves inside your Chaster lock."
                 version={import.meta.env.VITE_APP_VERSION}
             >
-                {configurationData ? (
+                {liveConfigurationData ? (
                     <StatusPill
                         tone={
-                            configurationData.role === "wearer"
+                            liveConfigurationData.role === "wearer"
                                 ? "wearer"
-                                : configurationData.role === "keyholder"
+                                : liveConfigurationData.role === "keyholder"
                                     ? "keyholder"
                                     : "neutral"
                         }
                     >
-                        {configurationData.role}
+                        {liveConfigurationData.role}
                     </StatusPill>
                 ) : null}
             </PageHeader>
@@ -152,19 +163,19 @@ export default function Configuration() {
 
             {isLoading ? (
                 <ConfigurationSkeleton />
-            ) : configurationData ? (
+            ) : liveConfigurationData ? (
                 <>
-                    <ConnectionStatus data={configurationData} />
+                    <ConnectionStatus data={liveConfigurationData} />
 
-                    {configurationData.config ? (
+                    {liveConfigurationData.config ? (
                         <div className="flex flex-col gap-5">
                             <GeneralConfigurationOptions
-                                config={configurationData.config}
+                                config={liveConfigurationData.config}
                                 onChange={handleConfigChange}
                             />
 
                             <CensoredMediaOptions
-                                config={configurationData.config}
+                                config={liveConfigurationData.config}
                                 onChange={handleConfigChange}
                             />
                         </div>

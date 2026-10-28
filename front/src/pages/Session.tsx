@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { LockKeyhole } from "lucide-react";
 
@@ -11,7 +11,9 @@ import SessionSkeleton from "@/components/common/sessions/SessionSkeleton";
 import ShowPuryfiPassword from "@/components/common/sessions/keyholder/ShowPuryfiPassword";
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
+import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
 import { getBackendUrl } from "@/lib/backend";
+import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { ChasterExtensionSessionSchema } from "@/types/api";
@@ -21,6 +23,15 @@ export default function Session() {
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const hasFetched = useRef(false);
+    const { mainToken } = useMemo(() => readChasterIframeParams(), []);
+
+    // Subscribe only once the REST call has created the lock configuration:
+    // opening the socket before that would race the session lookup.
+    const realtimeStatus = usePuryfiRealtimeStatus("session", sessionData ? (mainToken ?? null) : null);
+
+    const session: ChasterExtensionSessionSchema | null = sessionData
+        ? { ...sessionData, ...(realtimeStatus ?? {}) }
+        : null;
 
     useEffect(() => {
         if (hasFetched.current) return;
@@ -33,15 +44,12 @@ export default function Session() {
                     throw new Error("No login token detected in URL.");
                 }
 
-                const hash = window.location.hash.substring(1);
-                const params = JSON.parse(decodeURIComponent(hash));
-
-                if (!params.mainToken) {
+                if (!mainToken) {
                     throw new Error("mainToken not found in parameters.");
                 }
 
                 const backendUrl = getBackendUrl();
-                const response = await axios.get(`${backendUrl}/api/session/${params.mainToken}`);
+                const response = await axios.get(`${backendUrl}/api/session/${mainToken}`);
                 setSessionData(response.data);
             } catch (err: unknown) {
                 setError(getApiErrorMessage(err, "Error syncing with the local server."));
@@ -51,9 +59,9 @@ export default function Session() {
         };
 
         fetchSession();
-    }, []);
+    }, [mainToken]);
 
-    const hasPassword = Boolean(sessionData?.lock_password && sessionData.role === "keyholder");
+    const hasPassword = Boolean(session?.lock_password && session.role === "keyholder");
 
     return (
         <PageShell>
@@ -61,17 +69,17 @@ export default function Session() {
                 subtitle="Link Puryfi to this lock and review the settings in effect."
                 version={import.meta.env.VITE_APP_VERSION}
             >
-                {sessionData ? (
+                {session ? (
                     <StatusPill
                         tone={
-                            sessionData.role === "wearer"
+                            session.role === "wearer"
                                 ? "wearer"
-                                : sessionData.role === "keyholder"
+                                : session.role === "keyholder"
                                     ? "keyholder"
                                     : "neutral"
                         }
                     >
-                        {sessionData.role}
+                        {session.role}
                     </StatusPill>
                 ) : null}
             </PageHeader>
@@ -86,17 +94,17 @@ export default function Session() {
                 />
             ) : isLoading ? (
                 <SessionSkeleton />
-            ) : sessionData ? (
+            ) : session ? (
                 <>
                     <div className={cn("grid gap-5", hasPassword && "lg:grid-cols-2")}>
-                        <PuryfiConnection session={sessionData} />
+                        <PuryfiConnection session={session} />
 
-                        {hasPassword && sessionData.lock_password ? (
-                            <ShowPuryfiPassword puryfiPassword={sessionData.lock_password} />
+                        {hasPassword && session.lock_password ? (
+                            <ShowPuryfiPassword puryfiPassword={session.lock_password} />
                         ) : null}
                     </div>
 
-                    <SessionSettings session={sessionData} />
+                    <SessionSettings session={session} />
                 </>
             ) : (
                 <EmptySession />
