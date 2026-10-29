@@ -4,9 +4,11 @@ from typing import Any
 
 import msgpack
 
+from version import __version__
+
 manifest = {
     "name": "Puryfier",
-    "version": "0.3.0",
+    "version": __version__,
     "description": "Link Chaster with Puryfi",
     "author": "Sereti",
     "website": "https://paa.ge/sereti",

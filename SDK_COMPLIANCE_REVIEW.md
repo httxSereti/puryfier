@@ -33,7 +33,7 @@ Le SDK n’est pas une dépendance du serveur : `purify-sdk/` est un clone Git s
 | SDK local | `purify-sdk/`, commit `0252d1b` |
 | SDK npm | `@pury-fi/plugin-sdk@1.0.0` |
 | Runtime PuryFi de référence | 0.8.8.0 (`purify-sdk/versions-built/puryfi-firefox-0.8.8.0-an+fx.xpi`) |
-| Tests serveur | 188 tests passent (`pytest -q`) |
+| Tests serveur | 189 tests passent (`pytest -q`) |
 | Tests de contrat runtime | 11/11 passent (`pnpm test:runtime`) |
 
 ### Méthode de vérification
@@ -172,6 +172,18 @@ Tests associés : `server/tests/test_media_scan.py`.
 
 Tests associés : `server/tests/test_entities.py`.
 
+### 4.7 Version du manifest dérivée du projet
+
+**Avant :** `manifest["version"]` était codé en dur dans `protocol.py` et devait être synchronisé manuellement avec la version du projet lors des releases.
+
+**Maintenant :**
+
+- `server/src/version.py` lit la version depuis `server/pyproject.toml`, source unique pour le serveur, avec repli sur les métadonnées du paquet installé.
+- `server/src/realtime/protocol.py` construit le manifest avec `__version__`.
+- Un test vérifie que `manifest["version"]` correspond bien à `pyproject.toml`.
+
+Tests associés : `server/tests/test_protocol.py`.
+
 ---
 
 ## 5. Vérification dynamique du runtime 0.8.8.0
@@ -216,23 +228,19 @@ Points confirmés sur PuryFi 0.8.8.0 :
 
 ## 6. Points résiduels
 
-### 6.1 Version du manifest codée en dur
-
-`server/src/realtime/protocol.py:7-13` contient `"version": "0.3.0"`. Il faut la synchroniser avec la version du projet lors des releases.
-
-### 6.2 Configuration du plugin non persistée entre reconnexions
+### 6.1 Configuration du plugin non persistée entre reconnexions
 
 `Connection.configuration` démarre à `{}` et est renvoyé dans `setPluginConfiguration` à chaque connexion (`connection.py:77`, `:492-495`). Puryfier n’expose aucun champ de configuration PuryFi aujourd’hui, donc c’est sans impact. Si des champs sont ajoutés plus tard, il faudra persister la configuration reçue via `configurationChange`.
 
-### 6.3 Ordre `enabled` → `lockConfiguration`
+### 6.2 Ordre `enabled` → `lockConfiguration`
 
 `lock_events.py:100-116` envoie `enabled=true` avant `lockConfiguration`. La queue garantit la livraison ordonnée et la reprise, mais si `lockConfiguration` échoue durablement, PuryFi peut rester activé sans nouveau lock. Ce n’est pas une non-conformité SDK ; c’est un risque produit à décider explicitement.
 
-### 6.4 Timeout d’accord des intents
+### 6.3 Timeout d’accord des intents
 
 `initialize_plugin()` attend au maximum 30 s l’accord manuel des intents (`connection.py:110`, `:531-534`). Au-delà, le handshake est abandonné et la socket fermée. À surveiller si l’UX PuryFi demande une validation humaine lente.
 
-### 6.5 Fonctionnalités SDK non implémentées
+### 6.4 Fonctionnalités SDK non implémentées
 
 Non utilisées, donc sans impact sur les fonctionnalités actuelles :
 
@@ -249,7 +257,7 @@ Non utilisées, donc sans impact sur les fonctionnalités actuelles :
 ### 7.1 Tests serveur
 
 ```text
-188 passed
+189 passed
 ```
 
 Les tests couvrent maintenant :
@@ -260,7 +268,8 @@ Les tests couvrent maintenant :
 - la mise en queue avant `ready` / avant `intentsGrant` ;
 - le traitement par lots des scans média ;
 - les variantes d’erreur et les timeouts de drain ;
-- l’alignement de `PuryfiObjectLabel` sur le SDK, dont `Silhouette = 26`.
+- l’alignement de `PuryfiObjectLabel` sur le SDK, dont `Silhouette = 26` ;
+- la version du manifest dérivée de `pyproject.toml`.
 
 ### 7.2 Tests de contrat runtime
 
@@ -272,11 +281,10 @@ Limite : le harness dépend de `purify-sdk/versions-built/`, dossier ignoré par
 
 ## 8. Recommandations
 
-1. Synchroniser la version du manifest avec la version du projet.
-2. Si des champs de configuration PuryFi sont ajoutés, persister `Connection.configuration` entre reconnexions.
-3. Décider explicitement de l’ordre `enabled` / `lockConfiguration` et du comportement en cas d’échec partiel.
-4. Revoir le timeout de 30 s pour l’accord manuel des intents.
-5. Exécuter `pnpm test:runtime` dans la CI lorsque le XPI de référence est disponible.
+1. Si des champs de configuration PuryFi sont ajoutés, persister `Connection.configuration` entre reconnexions.
+2. Décider explicitement de l’ordre `enabled` / `lockConfiguration` et du comportement en cas d’échec partiel.
+3. Revoir le timeout de 30 s pour l’accord manuel des intents.
+4. Exécuter `pnpm test:runtime` dans la CI lorsque le XPI de référence est disponible.
 
 ---
 
