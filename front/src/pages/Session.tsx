@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
+import { useMemo } from "react";
 import { LockKeyhole } from "lucide-react";
 
 import MotdCard from "@/components/common/cards/MotdCard";
@@ -12,18 +11,14 @@ import ShowPuryfiPassword from "@/components/common/sessions/keyholder/ShowPuryf
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
-import { getBackendUrl } from "@/lib/backend";
+import { useSession } from "@/hooks/useSession";
 import { readChasterIframeParams } from "@/lib/chaster";
-import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { ChasterExtensionSessionSchema } from "@/types/api";
 
 export default function Session() {
-    const [sessionData, setSessionData] = useState<ChasterExtensionSessionSchema | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const hasFetched = useRef(false);
     const { mainToken } = useMemo(() => readChasterIframeParams(), []);
+    const { data: sessionData, error, isLoading, reload } = useSession(mainToken ?? null);
 
     // Subscribe only once the REST call has created the lock configuration:
     // opening the socket before that would race the session lookup.
@@ -32,34 +27,6 @@ export default function Session() {
     const session: ChasterExtensionSessionSchema | null = sessionData
         ? { ...sessionData, ...(realtimeStatus ?? {}) }
         : null;
-
-    useEffect(() => {
-        if (hasFetched.current) return;
-
-        hasFetched.current = true;
-
-        const fetchSession = async () => {
-            try {
-                if (!window.location.hash) {
-                    throw new Error("No login token detected in URL.");
-                }
-
-                if (!mainToken) {
-                    throw new Error("mainToken not found in parameters.");
-                }
-
-                const backendUrl = getBackendUrl();
-                const response = await axios.get(`${backendUrl}/api/session/${mainToken}`);
-                setSessionData(response.data);
-            } catch (err: unknown) {
-                setError(getApiErrorMessage(err, "Error syncing with the local server."));
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchSession();
-    }, [mainToken]);
 
     const hasPassword = Boolean(session?.lock_password && session.role === "keyholder");
 
@@ -90,7 +57,7 @@ export default function Session() {
                 <ErrorAlert
                     title="Could not load this extension"
                     message={error}
-                    onRetry={() => window.location.reload()}
+                    onRetry={mainToken ? reload : undefined}
                 />
             ) : isLoading ? (
                 <SessionSkeleton />

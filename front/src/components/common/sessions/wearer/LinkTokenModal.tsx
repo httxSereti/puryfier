@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, KeyRound, LoaderCircle, TriangleAlert, X } from "lucide-react";
-import axios from "axios";
 
 import { copyText } from "@/lib/clipboard";
-import { getBackendUrl, getPuryfiWebSocketUrl } from "@/lib/backend";
+import { getPuryfiWebSocketUrl } from "@/lib/backend";
+import { createLinkToken } from "@/lib/api/session";
 import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -60,9 +60,12 @@ export default function LinkTokenModal({ linkToken, onClose, onTokenCreated }: L
                 throw new Error("mainToken not found in parameters.");
             }
 
-            const backendUrl = getBackendUrl();
-            const response = await axios.post(`${backendUrl}/api/session/${mainToken}/link-token`);
-            const newToken: string = response.data.link_token;
+            const session = await createLinkToken(mainToken);
+            const newToken = session.link_token;
+
+            if (!newToken) {
+                throw new Error("The server did not return a link token.");
+            }
 
             setToken(newToken);
             onTokenCreated(newToken);

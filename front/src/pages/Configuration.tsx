@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import { Check, Link2, LockKeyhole, Settings2, ShieldCheck, Unplug } from "lucide-react";
 
 import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
@@ -9,8 +8,9 @@ import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
+import { useConfiguration } from "@/hooks/useConfiguration";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
-import { getBackendUrl } from "@/lib/backend";
+import { updateConfiguration } from "@/lib/api/configuration";
 import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -29,16 +29,20 @@ function postToParent(event: string, payload?: object) {
 }
 
 export default function Configuration() {
-    const [configurationData, setConfigurationData] = useState<ChasterExtensionConfigurationSchema | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const { partnerConfigurationToken } = useMemo(() => readChasterIframeParams(), []);
+    const {
+        data: configurationData,
+        setData: setConfigurationData,
+        error: fetchError,
+        isLoading,
+        reload,
+    } = useConfiguration(partnerConfigurationToken ?? null);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const [isDirty, setIsDirty] = useState(false);
 
-    // Keep a mutable ref to the latest config & token so the event listener always has fresh values
+    // Keep a mutable ref to the latest config so the message listener always
+    // saves the values currently displayed, without re-registering on edits.
     const configRef = useRef<ChasterExtensionConfigurationSchema | null>(null);
-    const tokenRef = useRef<string>("");
-    const hasFetched = useRef(false);
-    const { partnerConfigurationToken } = useMemo(() => readChasterIframeParams(), []);
 
     // Subscribe only once the REST call has created the lock configuration:
     // opening the socket before that would race the session lookup.
@@ -52,40 +56,12 @@ export default function Configuration() {
         : null;
 
     useEffect(() => {
-        postToParent("capabilities", { features: { save: true } });
-    }, []);
+        configRef.current = configurationData;
+    }, [configurationData]);
 
     useEffect(() => {
-        // Don't fetch session twice (react strict mode re-renders the component on development)
-        if (hasFetched.current) return;
-
-        hasFetched.current = true;
-
-        const fetchSession = async () => {
-            try {
-                if (!window.location.hash) {
-                    throw new Error("No login token detected in URL.");
-                }
-
-                if (!partnerConfigurationToken) {
-                    throw new Error("partnerConfigurationToken not found in parameters.");
-                }
-
-                tokenRef.current = partnerConfigurationToken;
-
-                const backendUrl = getBackendUrl();
-                const response = await axios.get(`${backendUrl}/api/configuration/${partnerConfigurationToken}`);
-                setConfigurationData(response.data);
-                configRef.current = response.data;
-            } catch (err: unknown) {
-                setError(getApiErrorMessage(err, "Error syncing with the local server."));
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchSession();
-    }, [partnerConfigurationToken]);
+        postToParent("capabilities", { features: { save: true } });
+    }, []);
 
     useEffect(() => {
         const handleMessage = async (e: MessageEvent) => {
@@ -101,17 +77,20 @@ export default function Configuration() {
 
             if (parsed.type !== "chaster" || parsed.event !== "partner_configuration_save") return;
 
+            const config = configRef.current?.config;
+
+            if (!partnerConfigurationToken || !config) {
+                postToParent("save_failed");
+                setSaveError("Configuration is not loaded yet. Reload the page and try again.");
+                return;
+            }
+
             // Show spinner on the Chaster modal
             postToParent("save_loading");
-            setError(null);
+            setSaveError(null);
 
             try {
-                const backendUrl = getBackendUrl();
-
-                await axios.put(
-                    `${backendUrl}/api/configuration/${tokenRef.current}`,
-                    configRef.current?.config ?? {},
-                );
+                await updateConfiguration(partnerConfigurationToken, config);
 
                 setIsDirty(false);
 
@@ -120,23 +99,20 @@ export default function Configuration() {
             } catch (err: unknown) {
                 // Stop spinner and keep modal open
                 postToParent("save_failed");
-                setError(getApiErrorMessage(err, "Save failed. Please try again."));
+                setSaveError(getApiErrorMessage(err, "Save failed. Please try again."));
             }
         };
 
         window.addEventListener("message", handleMessage);
         return () => window.removeEventListener("message", handleMessage);
-    }, []);
+    }, [partnerConfigurationToken]);
 
     const handleConfigChange = (updatedConfig: ChasterExtensionConfigSchema) => {
-        const current = configRef.current;
-        if (!current) return;
-
-        const next = { ...current, config: updatedConfig };
-        configRef.current = next;
-        setConfigurationData(next);
+        setConfigurationData((current) => (current ? { ...current, config: updatedConfig } : current));
         setIsDirty(true);
     };
+
+    const error = fetchError ?? saveError;
 
     return (
         <PageShell className="max-w-3xl">
@@ -159,7 +135,12 @@ export default function Configuration() {
                 ) : null}
             </PageHeader>
 
-            {error ? <ErrorAlert message={error} /> : null}
+            {error ? (
+                <ErrorAlert
+                    message={error}
+                    onRetry={fetchError && partnerConfigurationToken ? reload : undefined}
+                />
+            ) : null}
 
             {isLoading ? (
                 <ConfigurationSkeleton />
