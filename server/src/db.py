@@ -5,6 +5,9 @@ from pymongo import AsyncMongoClient
 from pymongo.uri_parser import parse_uri
 
 from models.documents import QueuedMessage, UserLockConfiguration, WebhookInboxEntry
+from utils.logging_config import get_logger
+
+log = get_logger(__name__)
 
 _client: AsyncMongoClient | None = None
 
@@ -32,13 +35,13 @@ async def init_db() -> None:
     _client = AsyncMongoClient(url)
 
     db_name = _resolve_db_name(url)
-    print(f"[DB] Connecting to MongoDB: {db_name}")
+    log.info("db.connecting", database=db_name)
 
     await init_beanie(
         database=_client[db_name],
         document_models=[UserLockConfiguration, QueuedMessage, WebhookInboxEntry],
     )
-    print("[DB] Beanie initialised ✓")
+    log.info("db.ready", database=db_name)
 
 
 async def close_db() -> None:
@@ -47,4 +50,4 @@ async def close_db() -> None:
     if _client is not None:
         await _client.close()
         _client = None
-        print("[DB] MongoDB connection closed")
+        log.info("db.closed")

@@ -1,15 +1,16 @@
 import asyncio
-import logging
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
+import structlog
 from pymongo import ASCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from models.documents.webhook_inbox_entry import WebhookInboxEntry
+from utils.logging_config import get_logger
 from utils.redaction import redact_path
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class WebhookInboxWorker:
@@ -41,7 +42,7 @@ class WebhookInboxWorker:
         self._wake = asyncio.Event()
         await self._recover_processing()
         self._task = asyncio.create_task(self._run(), name="webhook-inbox-worker")
-        logger.info("Webhook inbox worker started")
+        log.info("webhook.worker_started")
 
     async def stop(self) -> None:
         self._stopping = True
@@ -54,7 +55,7 @@ class WebhookInboxWorker:
         with suppress(asyncio.CancelledError):
             await self._task
         self._task = None
-        logger.info("Webhook inbox worker stopped")
+        log.info("webhook.worker_stopped")
 
     def wake(self) -> None:
         """Wake the worker after a new entry was inserted."""
@@ -82,7 +83,11 @@ class WebhookInboxWorker:
             return False
 
         try:
-            await self._dispatch(entry)
+            with structlog.contextvars.bound_contextvars(
+                webhook_event=entry.event,
+                webhook_event_key=entry.event_key,
+            ):
+                await self._dispatch(entry)
         except asyncio.CancelledError:
             await self._release(entry)
             raise
@@ -90,7 +95,11 @@ class WebhookInboxWorker:
             await self._mark_failed(entry, exc)
         else:
             await self._mark_done(entry)
-            logger.info("Processed webhook %s (%s)", entry.event_key, entry.event)
+            log.info(
+                "webhook.processed",
+                event_key=entry.event_key,
+                webhook_event=entry.event,
+            )
 
         return True
 
@@ -102,7 +111,7 @@ class WebhookInboxWorker:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Webhook inbox worker loop error")
+                log.exception("webhook.worker_error")
                 processed = False
 
             if processed:
@@ -132,9 +141,9 @@ class WebhookInboxWorker:
             },
         )
         if result.modified_count:
-            logger.warning(
-                "Requeued %d webhook inbox entries interrupted by a restart",
-                result.modified_count,
+            log.warning(
+                "webhook.requeued",
+                count=result.modified_count,
             )
 
     async def _claim_next(self) -> WebhookInboxEntry | None:
@@ -243,11 +252,12 @@ class WebhookInboxWorker:
         error = redact_path(f"{type(exc).__name__}: {exc}")[:2000]
 
         if entry.attempts >= self.max_attempts:
-            logger.error(
-                "Webhook %s failed permanently after %d attempts: %s",
-                entry.event_key,
-                entry.attempts,
-                error,
+            log.error(
+                "webhook.failed_permanently",
+                event_key=entry.event_key,
+                webhook_event=entry.event,
+                attempts=entry.attempts,
+                error=error,
             )
             fields = {
                 "status": "failed",
@@ -261,13 +271,14 @@ class WebhookInboxWorker:
                 self.retry_base_seconds * (2 ** max(0, entry.attempts - 1)),
                 self.retry_max_seconds,
             )
-            logger.warning(
-                "Webhook %s failed (attempt %d/%d), retrying in %ss: %s",
-                entry.event_key,
-                entry.attempts,
-                self.max_attempts,
-                delay,
-                error,
+            log.warning(
+                "webhook.retry_scheduled",
+                event_key=entry.event_key,
+                webhook_event=entry.event,
+                attempt=entry.attempts,
+                max_attempts=self.max_attempts,
+                retry_in=delay,
+                error=error,
             )
             fields = {
                 "status": "pending",

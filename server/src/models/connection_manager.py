@@ -1,14 +1,14 @@
 import asyncio
-import logging
 from typing import Any, Self
 
 from models.connection import Connection
 from models.documents.user_lock_configuration import UserLockConfiguration
 from models.session_watchers import watchers
 from schemas import ChasterExtensionConfigSchema
+from utils.logging_config import get_logger
 from utils.redaction import token_fingerprint
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class ConnectionManager:
@@ -41,9 +41,9 @@ class ConnectionManager:
 
         # A new socket for the same token must win: the old one could still
         # process scans or receive RPC responses. Replace it explicitly.
-        logger.info(
-            "Replacing existing Puryfi connection for token %s",
-            token_fingerprint(user_link_token),
+        log.info(
+            "connection.replaced",
+            link_token=token_fingerprint(user_link_token),
         )
         await self.publish_status(connection)
         await previous.close(code=4001)

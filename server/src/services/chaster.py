@@ -1,10 +1,9 @@
-import logging
-
 import httpx
 
 from utils import chaster_api
+from utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 async def add_time_to_lock(session_id: str, duration: int) -> bool:
@@ -24,9 +23,10 @@ async def add_time_to_lock(session_id: str, duration: int) -> bool:
         )
         return response.status_code == 201
     except httpx.HTTPError:
-        logger.warning(
-            "Could not add time to Chaster lock",
-            extra={"chaster_session_id": session_id, "chaster_duration": duration},
+        log.warning(
+            "chaster.add_time_failed",
+            chaster_session_id=session_id,
+            duration=duration,
             exc_info=True,
         )
         return False

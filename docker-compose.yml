@@ -116,6 +116,9 @@ services:
       - DATABASE_URL=mongodb://${MONGO_USER:-puryfi}:${MONGO_PASSWORD:-puryfi}@mongo:27017/puryfi_chaster?authSource=admin
       # Same public origin as the frontend.
       - FRONT_URL=https://${PUBLIC_DOMAIN:-${FRONT_DOMAIN:-app.example.com}}
+      # json -> one event per line for log collectors; console -> readable.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
     labels:
       # Forward API and WebSocket traffic directly to the backend, without
       # going through the front/React container.

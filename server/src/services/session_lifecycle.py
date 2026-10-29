@@ -1,7 +1,10 @@
 from models.connection_manager import manager
 from models.documents import QueuedMessage, UserLockConfiguration
 from models.session_watchers import watchers
+from utils.logging_config import get_logger
 from utils.redaction import token_fingerprint
+
+log = get_logger(__name__)
 
 # Custom WebSocket close code used for a revoked/ended session.
 SESSION_ENDED_CLOSE_CODE = 4004
@@ -29,12 +32,13 @@ async def revoke_session(session_id: str) -> bool:
             link_token, code=SESSION_ENDED_CLOSE_CODE
         )
         await QueuedMessage.find(QueuedMessage.link_token == link_token).delete()
-        print(
-            "[Session] Revoked Puryfi token "
-            f"{token_fingerprint(link_token)} for session {session_id!r}"
+        log.info(
+            "session.revoked",
+            session_id=session_id,
+            link_token=token_fingerprint(link_token),
         )
 
     await watchers.close_session(session_id, code=SESSION_ENDED_CLOSE_CODE)
     await lock_config.delete()
-    print(f"[Session] Purged configuration for session {session_id!r}")
+    log.info("session.purged", session_id=session_id)
     return True

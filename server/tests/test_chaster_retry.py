@@ -124,10 +124,13 @@ class TestRetryLogs:
         retry_record = next(
             record
             for record in caplog.records
-            if record.message == "Retrying Chaster request"
+            if isinstance(record.msg, dict)
+            and record.msg.get("event") == "chaster.request_retry"
         )
-        assert retry_record.chaster_method == "GET"
-        assert retry_record.chaster_attempt == 1
-        assert retry_record.chaster_status == 500
-        assert "super-secret-token" not in retry_record.chaster_path
-        assert "<token:" in retry_record.chaster_path
+        fields = retry_record.msg
+        assert retry_record.levelname == "WARNING"
+        assert fields["chaster_method"] == "GET"
+        assert fields["chaster_attempt"] == 1
+        assert fields["chaster_status"] == 500
+        assert "super-secret-token" not in fields["chaster_path"]
+        assert "<token:" in fields["chaster_path"]

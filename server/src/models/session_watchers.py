@@ -1,10 +1,11 @@
 import asyncio
-import logging
 from typing import Any
 
 from fastapi import WebSocket
 
-logger = logging.getLogger(__name__)
+from utils.logging_config import get_logger
+
+log = get_logger(__name__)
 
 WATCHER_SEND_TIMEOUT_SECONDS = 5.0
 
@@ -36,7 +37,7 @@ class SessionWatcherManager:
                 timeout=WATCHER_SEND_TIMEOUT_SECONDS,
             )
         except Exception:
-            logger.debug("Removing failed session watcher", exc_info=True)
+            log.debug("watcher.send_failed", session_id=session_id, exc_info=True)
             self.remove(session_id, websocket)
 
     async def broadcast(self, session_id: str, message: dict[str, Any]) -> None:
@@ -52,7 +53,7 @@ class SessionWatcherManager:
             try:
                 await websocket.close(code=code)
             except Exception:
-                logger.debug("Failed to close session watcher", exc_info=True)
+                log.debug("watcher.close_failed", session_id=session_id, exc_info=True)
 
 
 watchers = SessionWatcherManager()

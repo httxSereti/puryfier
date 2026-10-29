@@ -7,6 +7,9 @@ from schemas import ChasterExtensionConfigSchema, ChasterExtensionSessionSchema
 from services.lock_configuration import get_or_create_lock_configuration
 from typings.chaster import PartnerGetSessionAuthRepDto
 from utils.chaster_api import get_session_auth
+from utils.logging_config import get_logger
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -96,7 +99,7 @@ async def create_link_token(main_token: str):
     if not lock_config.link_token:
         lock_config.link_token = cuid()
         await lock_config.save()
-        print(f"[DB] Generated link_token for session {session_id!r}")
+        log.info("link_token.created", session_id=session_id)
 
     return ChasterExtensionSessionSchema(
         id=str(lock_config.id),

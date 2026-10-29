@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import secrets
 
@@ -8,9 +7,10 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from utils.chaster_events import extract_session_id, extract_session_updated_at
+from utils.logging_config import get_logger
 from workers.webhook_inbox import webhook_worker
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhook"])
 security = HTTPBasic()
@@ -119,7 +119,7 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     except WebhookCredentialsNotConfigured:
         # Defense in depth: even if startup validation is bypassed (tests,
         # embedded ASGI usage), never accept an unauthenticated webhook.
-        logger.error("Chaster webhook credentials are not configured; rejecting request")
+        log.error("webhook.credentials_missing")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Webhook authentication is not configured",
@@ -198,7 +198,7 @@ async def chaster_webhook(request: Request, _: str = Depends(verify_credentials)
 
     accepted = await webhook_worker.enqueue(data, event_key)
     if not accepted:
-        logger.info("Webhook event '%s' already accepted, ignoring retry", event_key)
+        log.info("webhook.duplicate_ignored", event_key=event_key)
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={"status": "ok", "action": "duplicate_ignored"},

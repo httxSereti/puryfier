@@ -3,7 +3,10 @@ import secrets
 from models.connection_manager import manager
 from models.documents.user_lock_configuration import UserLockConfiguration
 from services.queue import queue_message
+from utils.logging_config import get_logger
 from utils.redaction import token_fingerprint
+
+log = get_logger(__name__)
 
 
 async def handle_lock_frozen(payload: dict) -> dict:
@@ -13,7 +16,7 @@ async def handle_lock_frozen(payload: dict) -> dict:
     session_id = payload.get('data', {}).get('sessionId')
 
     if not session_id:
-        print("[lock_frozen] Error: Could not find sessionId in payload.")
+        log.warning("webhook.lock_frozen.no_session")
         return {"status": "ok", "action": "lock_frozen_ignored_no_session"}
     
     lock_config = await UserLockConfiguration.find_one(
@@ -21,15 +24,15 @@ async def handle_lock_frozen(payload: dict) -> dict:
     )
     
     if not lock_config or not lock_config.config:
-        print(f"[lock_frozen] No UserLockConfiguration found for session {session_id}")
+        log.warning("webhook.lock_frozen.no_config", session_id=session_id)
         return {"status": "ok", "action": "lock_frozen_ignored_no_config"}
         
     if not lock_config.link_token:
-        print(f"[lock_frozen] No link_token in UserLockConfiguration for session {session_id}")
+        log.warning("webhook.lock_frozen.no_link_token", session_id=session_id)
         return {"status": "ok", "action": "lock_frozen_ignored_no_link_token"}
         
     if not lock_config.config.lock_on_freeze:
-        print(f"[lock_frozen] lock_on_freeze is False for session {session_id}, ignoring.")
+        log.debug("webhook.lock_frozen.disabled", session_id=session_id)
         return {"status": "ok", "action": "lock_frozen_ignored_config_false"}
         
     connection = manager.get_by_user_link_token(lock_config.link_token)
@@ -39,9 +42,10 @@ async def handle_lock_frozen(payload: dict) -> dict:
     await lock_config.save()
     
     if connection:
-        print(
-            "[lock_frozen] Found connection for token "
-            f"{token_fingerprint(lock_config.link_token)}"
+        log.info(
+            "webhook.lock_frozen.connection_found",
+            session_id=session_id,
+            link_token=token_fingerprint(lock_config.link_token),
         )
         # Send both state changes as one ordered mailbox batch: no other
         # command can interleave between enabling Puryfi and setting its lock.
@@ -58,9 +62,10 @@ async def handle_lock_frozen(payload: dict) -> dict:
     
         return {"status": "ok", "action": "lock_frozen_processed"}
     else:
-        print(
-            "[lock_frozen] No connection found for token "
-            f"{token_fingerprint(lock_config.link_token)}; queuing message."
+        log.info(
+            "webhook.lock_frozen.queued",
+            session_id=session_id,
+            link_token=token_fingerprint(lock_config.link_token),
         )
         await queue_message(lock_config.link_token, "setState", {"path": "enabled", "value": True})
         await queue_message(lock_config.link_token, "setState", {

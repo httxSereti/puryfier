@@ -1,5 +1,4 @@
 import asyncio
-import logging
 
 import httpx
 from beanie.exceptions import CollectionWasNotInitialized
@@ -11,9 +10,10 @@ from models.connection_manager import manager
 from models.documents import UserLockConfiguration
 from models.session_watchers import watchers
 from utils import chaster_api
+from utils.logging_config import get_logger
 from utils.redaction import token_fingerprint
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/ws")
 
@@ -49,7 +49,7 @@ async def watch_session(
     except WebSocketDisconnect:
         pass
     except Exception:
-        logger.debug("Session watcher failed", exc_info=True)
+        log.debug("ws.watcher.failed", exc_info=True)
     finally:
         watchers.remove(session_id, websocket)
 
@@ -60,13 +60,17 @@ async def session_status_endpoint(websocket: WebSocket, main_token: str):
     try:
         data = await chaster_api.get_session_auth(main_token)
     except HTTPException as e:
-        print(f"[WS-Realtime] Chaster rejected the session token: {e.status_code}")
+        log.warning(
+            "ws.session.auth_rejected",
+            status_code=e.status_code,
+        )
         await websocket.close(code=4004)
         return
-    except Exception as e:  # noqa: BLE001 - never leave the browser socket hanging
-        print(
-            "[WS-Realtime] Could not authenticate the session token "
-            f"{token_fingerprint(main_token)}: {type(e).__name__}"
+    except Exception:
+        log.warning(
+            "ws.session.auth_failed",
+            link_token=token_fingerprint(main_token),
+            exc_info=True,
         )
         await websocket.close(code=1011)
         return
@@ -85,8 +89,11 @@ async def session_status_endpoint(websocket: WebSocket, main_token: str):
         lock_config = await UserLockConfiguration.find_one(
             UserLockConfiguration.session_id == session_id
         )
-    except (CollectionWasNotInitialized, PyMongoError) as e:
-        print(f"[WS-Realtime] Error fetching user lock configuration: {e}")
+    except (CollectionWasNotInitialized, PyMongoError):
+        log.exception(
+            "ws.lock_config_failed",
+            session_id=session_id,
+        )
         await websocket.close(code=1011)
         return
 
@@ -107,18 +114,26 @@ async def configuration_status_endpoint(websocket: WebSocket, configuration_toke
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPStatusError as e:
-        print(f"[WS-Realtime] Chaster rejected the configuration token: {e.response.status_code}")
+        log.warning(
+            "ws.configuration.auth_rejected",
+            status_code=e.response.status_code,
+        )
         await websocket.close(code=4004)
         return
-    except httpx.HTTPError as e:
-        print(
-            "[WS-Realtime] Could not fetch the configuration "
-            f"{token_fingerprint(configuration_token)}: {type(e).__name__}"
+    except httpx.HTTPError:
+        log.warning(
+            "ws.configuration.fetch_failed",
+            configuration_token=token_fingerprint(configuration_token),
+            exc_info=True,
         )
         await websocket.close(code=1011)
         return
-    except (TypeError, ValueError) as e:
-        print(f"[WS-Realtime] Invalid configuration response: {type(e).__name__}")
+    except (TypeError, ValueError):
+        log.warning(
+            "ws.configuration.invalid_response",
+            configuration_token=token_fingerprint(configuration_token),
+            exc_info=True,
+        )
         await websocket.close(code=1011)
         return
 
@@ -135,8 +150,11 @@ async def configuration_status_endpoint(websocket: WebSocket, configuration_toke
         lock_config = await UserLockConfiguration.find_one(
             UserLockConfiguration.session_id == session_id
         )
-    except (CollectionWasNotInitialized, PyMongoError) as e:
-        print(f"[WS-Realtime] Error fetching user lock configuration: {e}")
+    except (CollectionWasNotInitialized, PyMongoError):
+        log.exception(
+            "ws.lock_config_failed",
+            session_id=session_id,
+        )
         await websocket.close(code=1011)
         return
 
@@ -158,15 +176,18 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
         user_lock_config = await UserLockConfiguration.find_one(
             UserLockConfiguration.link_token == user_link_token
         )
-    except (CollectionWasNotInitialized, PyMongoError) as e:
-        print(f"[WS-Puryfi] Error fetching user lock configuration: {e}")
+    except (CollectionWasNotInitialized, PyMongoError):
+        log.exception(
+            "ws.plugin.lock_config_failed",
+            link_token=token_fingerprint(user_link_token),
+        )
         await websocket.close(code=1011)
         return
 
     if user_lock_config is None:
-        print(
-            "[WS-Puryfi] User lock configuration not found for token "
-            f"{token_fingerprint(user_link_token)}"
+        log.warning(
+            "ws.plugin.unknown_token",
+            link_token=token_fingerprint(user_link_token),
         )
         await websocket.close(code=4004)
         return
@@ -179,21 +200,22 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
     try:
         await manager.add(connection, user_link_token)
 
-        print(
-            "[WS-Puryfi] Connection established for token "
-            f"{token_fingerprint(user_link_token)}"
+        log.info(
+            "ws.plugin.connected",
+            session_id=user_lock_config.session_id,
+            link_token=token_fingerprint(user_link_token),
         )
         while True:
             data = await websocket.receive_bytes()
             await connection.handle_message(data)
     except WebSocketDisconnect:
         pass
-    except Exception as e:  # noqa: BLE001 - close the socket on any handler failure
+    except Exception:
         # e.g. a malformed msgpack frame: never leave the dead connection
         # registered (REVIEW.md #6).
-        print(
-            "[WS-Puryfi] Handler error for token "
-            f"{token_fingerprint(user_link_token)}: {type(e).__name__}"
+        log.exception(
+            "ws.plugin.handler_failed",
+            link_token=token_fingerprint(user_link_token),
         )
         try:
             await websocket.close(code=1011)
@@ -206,9 +228,10 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
         async def _cleanup() -> None:
             await connection.stop()
             await manager.remove(user_link_token, connection)
-            print(
-                "[WS-Puryfi] Connection closed for token "
-                f"{token_fingerprint(user_link_token)}"
+            log.info(
+                "ws.plugin.disconnected",
+                session_id=user_lock_config.session_id,
+                link_token=token_fingerprint(user_link_token),
             )
 
         cleanup_task = asyncio.create_task(_cleanup(), name="puryfi-cleanup")

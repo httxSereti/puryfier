@@ -1,14 +1,14 @@
 import asyncio
-import logging
 import os
 import random
 
 import httpx
 from fastapi import HTTPException
 
+from utils.logging_config import get_logger
 from utils.redaction import redact_path
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 CHASTER_BASE_URL = "https://api.chaster.app"
 CHASTER_MAX_ATTEMPTS = 3
@@ -59,27 +59,23 @@ async def request_chaster(method: str, path: str, **kwargs) -> httpx.Response:
             response = await chaster_client.request(method, path, **kwargs)
         except httpx.TransportError as exc:
             if attempt >= CHASTER_MAX_ATTEMPTS:
-                logger.error(
-                    "Chaster request failed permanently",
-                    extra={
-                        "chaster_method": method,
-                        "chaster_path": redact_path(path),
-                        "chaster_attempt": attempt,
-                        "chaster_error": type(exc).__name__,
-                    },
+                log.error(
+                    "chaster.request_failed",
+                    chaster_method=method,
+                    chaster_path=redact_path(path),
+                    chaster_attempt=attempt,
+                    chaster_error=type(exc).__name__,
                 )
                 raise
 
             delay = _retry_delay(attempt)
-            logger.warning(
-                "Retrying Chaster request after transport error",
-                extra={
-                    "chaster_method": method,
-                    "chaster_path": redact_path(path),
-                    "chaster_attempt": attempt,
-                    "chaster_error": type(exc).__name__,
-                    "chaster_retry_delay": round(delay, 3),
-                },
+            log.warning(
+                "chaster.request_retry",
+                chaster_method=method,
+                chaster_path=redact_path(path),
+                chaster_attempt=attempt,
+                chaster_error=type(exc).__name__,
+                retry_in=round(delay, 3),
             )
             await asyncio.sleep(delay)
             continue
@@ -92,27 +88,23 @@ async def request_chaster(method: str, path: str, **kwargs) -> httpx.Response:
             return response
 
         if attempt >= CHASTER_MAX_ATTEMPTS:
-            logger.error(
-                "Chaster request failed permanently",
-                extra={
-                    "chaster_method": method,
-                    "chaster_path": redact_path(path),
-                    "chaster_attempt": attempt,
-                    "chaster_status": response.status_code,
-                },
+            log.error(
+                "chaster.request_failed",
+                chaster_method=method,
+                chaster_path=redact_path(path),
+                chaster_attempt=attempt,
+                chaster_status=response.status_code,
             )
             return response
 
         delay = _retry_delay(attempt, response)
-        logger.warning(
-            "Retrying Chaster request",
-            extra={
-                "chaster_method": method,
-                "chaster_path": redact_path(path),
-                "chaster_attempt": attempt,
-                "chaster_status": response.status_code,
-                "chaster_retry_delay": round(delay, 3),
-            },
+        log.warning(
+            "chaster.request_retry",
+            chaster_method=method,
+            chaster_path=redact_path(path),
+            chaster_attempt=attempt,
+            chaster_status=response.status_code,
+            retry_in=round(delay, 3),
         )
         await asyncio.sleep(delay)
 
@@ -169,9 +161,9 @@ async def create_custom_log(session_id: str, title: str, description: str, role:
         response.raise_for_status()
         return True
     except httpx.HTTPError:
-        logger.warning(
-            "Could not create Chaster custom log",
-            extra={"chaster_session_id": session_id},
+        log.warning(
+            "chaster.custom_log_failed",
+            chaster_session_id=session_id,
             exc_info=True,
         )
         return False

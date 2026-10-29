@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -13,8 +12,9 @@ from services.chaster import add_time_to_lock
 from services.queue import fetch_queued_messages
 from typings.puryfi_enums import PuryfiObjectLabel
 from utils.chaster_api import create_custom_log
+from utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 manifest = {
     "name": "Puryfier",
@@ -138,7 +138,12 @@ class Connection:
             return
         exc = task.exception()
         if exc is not None:
-            logger.error("Connection task %s failed: %r", task.get_name(), exc)
+            log.error(
+                "connection.task_failed",
+                task=task.get_name(),
+                error=type(exc).__name__,
+                exc_info=exc,
+            )
 
     def _ensure_worker(self) -> None:
         if self._closed:
@@ -250,7 +255,7 @@ class Connection:
         try:
             await self.websocket.close(code=code)
         except Exception:
-            logger.debug("Failed to close Puryfi websocket", exc_info=True)
+            log.debug("connection.websocket_close_failed", exc_info=True)
 
     async def send_response(self, response_id: int, payload: dict):
         message = {
@@ -381,23 +386,26 @@ class Connection:
                 timeout=self.HANDSHAKE_TIMEOUT_SECONDS,
             )
         except TimeoutError:
-            logger.warning(
-                "Puryfi handshake timed out for session %r",
-                self.user_lock_config.session_id,
+            log.warning(
+                "connection.handshake_timeout",
+                session_id=self.user_lock_config.session_id,
             )
             await self.close(code=1011)
             return
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Puryfi handshake failed")
+            log.exception(
+                "connection.handshake_failed",
+                session_id=self.user_lock_config.session_id,
+            )
             await self.close(code=1011)
             return
 
         if not initialized:
-            logger.warning(
-                "Puryfi handshake did not complete for session %r",
-                self.user_lock_config.session_id,
+            log.warning(
+                "connection.handshake_incomplete",
+                session_id=self.user_lock_config.session_id,
             )
             await self.close(code=1011)
             return
@@ -407,7 +415,10 @@ class Connection:
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Puryfi queue drain failed")
+            log.exception(
+                "connection.queue_drain_failed",
+                session_id=self.user_lock_config.session_id,
+            )
 
     async def initialize_plugin(self) -> bool:
         """Initialize the Puryfi plugin. Returns True only on full success."""
@@ -415,19 +426,31 @@ class Connection:
             # 1. Set Plugin Manifest
             res = await self.send_message("setPluginManifest", {"manifest": manifest})
             if res.get("type", "") == "error":
-                print(f"Failed to set plugin manifest: {res.get('message')}")
+                log.warning(
+                    "connection.plugin_manifest_failed",
+                    session_id=self.user_lock_config.session_id,
+                    error=res.get("message"),
+                )
                 return False
 
             # 2. Set Plugin Configuration
             res = await self.send_message("setPluginConfiguration", {"configuration": self.configuration})
             if res.get("type", "") == "error":
-                print(f"Failed to set plugin configuration: {res.get('message')}")
+                log.warning(
+                    "connection.plugin_configuration_failed",
+                    session_id=self.user_lock_config.session_id,
+                    error=res.get("message"),
+                )
                 return False
 
             # 3. Request Intents
             res = await self.send_message("getPluginIntents", {})
             if res.get("type", "") == "error":
-                print(f"Failed to get plugin intents: {res.get('message')}")
+                log.warning(
+                    "connection.plugin_intents_failed",
+                    session_id=self.user_lock_config.session_id,
+                    error=res.get("message"),
+                )
                 return False
 
             # 4. Request Intents
@@ -437,7 +460,11 @@ class Connection:
             else:
                 res = await self.send_message("requestPluginIntents", {"intents": intents})
                 if res.get("type", "") == "error":
-                    print(f"Failed to request plugin intents: {res.get('message')}")
+                    log.warning(
+                        "connection.plugin_intents_request_failed",
+                        session_id=self.user_lock_config.session_id,
+                        error=res.get("message"),
+                    )
                     return False
                 # Wait for the client to grant intents through the 'intentsGrant' message
                 await asyncio.wait_for(
@@ -452,18 +479,28 @@ class Connection:
             # Subscribe to static media scans
             res = await self.send_message("subscribeToStaticMediaScans", {})
             if res.get("type", "") == "error":
-                print(f"Failed to subscribe to static media scans: {res.get('message')}")
+                log.warning(
+                    "connection.plugin_scan_subscription_failed",
+                    session_id=self.user_lock_config.session_id,
+                    error=res.get("message"),
+                )
                 return False
 
             return True
 
         except TimeoutError:
-            print("[Connection] Timed out waiting for plugin intents.")
+            log.warning(
+                "connection.intents_timeout",
+                session_id=self.user_lock_config.session_id,
+            )
             return False
         except asyncio.CancelledError:
             raise
-        except Exception as e:  # noqa: BLE001 - one failed init must not kill the connection
-            print(f"Initialization error: {type(e).__name__}")
+        except Exception:
+            log.exception(
+                "connection.initialization_failed",
+                session_id=self.user_lock_config.session_id,
+            )
             return False
 
     async def process_queued_messages(self, user_link_token: str) -> None:
@@ -486,7 +523,10 @@ class Connection:
                 timeout=self.INTENTS_TIMEOUT_SECONDS,
             )
         except TimeoutError:
-            print("[Queue] Intents were not granted in time; keeping queue.")
+            log.warning(
+                "connection.queue_intents_timeout",
+                session_id=self.user_lock_config.session_id,
+            )
             return
 
         if not await link_with_token(user_link_token):
@@ -500,13 +540,23 @@ class Connection:
         queued_messages = await fetch_queued_messages(user_link_token)
 
         for msg in queued_messages:
-            print(f"[Queue] Sending queued message: {msg.msg_type}")
+            log.debug(
+                "queue.sending",
+                session_id=self.user_lock_config.session_id,
+                message_type=msg.msg_type,
+            )
             res = await self.send_message(msg.msg_type, msg.payload)
 
             if isinstance(res, dict) and res.get("type") == "error":
                 error_name = res.get("name")
                 error_msg = res.get("message")
-                print(f"[Queue Error] Failed to send '{msg.msg_type}': {error_name} - {error_msg}")
+                log.warning(
+                    "queue.send_failed",
+                    session_id=self.user_lock_config.session_id,
+                    message_type=msg.msg_type,
+                    error_name=error_name,
+                    error=error_msg,
+                )
 
                 if error_name == "missingPluginIntents":
                     # Keep the message queued for the next drain and re-request intents.

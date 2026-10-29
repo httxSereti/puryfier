@@ -9,6 +9,9 @@ from schemas import ChasterExtensionConfigSchema, ChasterExtensionConfigurationS
 from services.lock_configuration import get_or_create_lock_configuration
 from typings.chaster import PartnerConfigurationForPublic
 from utils import chaster_api
+from utils.logging_config import get_logger
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/configuration", tags=["configuration"])
 
@@ -118,14 +121,18 @@ async def update_configuration(
             raise TypeError("Unexpected Chaster response")
         session_id = data.get("sessionId")
         # Not logging the full Chaster response: it contains user data (REVIEW.md #13).
-        print(f"[config-put] session_id from chaster: {session_id}")
+        log.info("configuration.session_resolved", session_id=session_id)
 
         if session_id:
             lock_config = await UserLockConfiguration.find_one(
                 UserLockConfiguration.session_id == session_id
             )
             if lock_config:
-                print(f"[config-put] found lock_config id: {lock_config.id}")
+                log.info(
+                    "configuration.lock_config_found",
+                    session_id=session_id,
+                    lock_config_id=str(lock_config.id),
+                )
 
                 lock_config.config = payload
                 await lock_config.save()
@@ -133,11 +140,14 @@ async def update_configuration(
                 await manager.update_cached_config(
                     lock_config.link_token or "", lock_config.config
                 )
-                print(f"[DB] Updated UserLockConfiguration for session {session_id!r}")
+                log.info("configuration.updated", session_id=session_id)
             else:
-                print(f"[config-put] NO lock_config found for session_id: {session_id}")
+                log.warning(
+                    "configuration.no_lock_config",
+                    session_id=session_id,
+                )
         else:
-            print("[config-put] NO session_id in response!")
+            log.warning("configuration.no_session_id")
 
         return {"status": "ok"}
     except httpx.HTTPStatusError as e:

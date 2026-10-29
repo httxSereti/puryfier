@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from utils.logging_config import configure_logging
+
+configure_logging()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,15 +16,20 @@ from db import close_db, init_db
 from routes import configuration, extensions, webhooks, websocket
 from routes.webhooks.chaster import validate_webhook_credentials
 from utils.chaster_api import close_chaster_client
+from utils.logging_config import get_logger
 from utils.redaction import install_access_log_redaction
+from utils.request_context import REQUEST_ID_HEADER, RequestContextMiddleware
 from workers.webhook_inbox import webhook_worker
+
+log = get_logger(__name__)
 
 install_access_log_redaction()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Also install here in case the server reset logging after importing the app.
+    # Defense in depth: if uvicorn access logging is re-enabled, token-bearing
+    # paths must stay redacted.
     install_access_log_redaction()
     # Fail closed: never start with an unauthenticated webhook endpoint.
     validate_webhook_credentials()
@@ -56,7 +65,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[REQUEST_ID_HEADER],
 )
+
+# Outermost middleware: every log emitted while handling a request (including
+# CORS errors) carries the request id and the redacted path.
+app.add_middleware(RequestContextMiddleware)
 
 app.include_router(websocket.router)
 app.include_router(webhooks.chaster.router)
@@ -65,5 +79,7 @@ app.include_router(configuration.router)
 
 if __name__ == "__main__":
     import uvicorn
-    print("WebSocket server listening on port 8000")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+    log.info("server.starting", port=8000)
+    # log_config=None keeps the structlog configuration installed above.
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_config=None)

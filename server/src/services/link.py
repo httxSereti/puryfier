@@ -2,7 +2,10 @@ from beanie.exceptions import CollectionWasNotInitialized
 from pymongo.errors import PyMongoError
 
 from models.documents.user_lock_configuration import UserLockConfiguration
+from utils.logging_config import get_logger
 from utils.redaction import token_fingerprint
+
+log = get_logger(__name__)
 
 
 async def link_with_token(link_token: str) -> bool:
@@ -16,19 +19,27 @@ async def link_with_token(link_token: str) -> bool:
         )
 
         if lock_config is None:
-            print(
-                "[Link] No UserLockConfiguration found for token "
-                f"{token_fingerprint(link_token)}"
+            log.warning(
+                "link.no_configuration",
+                link_token=token_fingerprint(link_token),
             )
             return False
 
         lock_config.has_linked_plugin = True
         await lock_config.save()
 
-        print(f"[Link] Session {lock_config.id!r} is now linked ✓")
+        log.info(
+            "link.linked",
+            session_id=str(lock_config.id),
+            link_token=token_fingerprint(link_token),
+        )
 
         return True
 
-    except (CollectionWasNotInitialized, PyMongoError) as e:
-        print(f"[Link] Error during linking: {e}")
+    except (CollectionWasNotInitialized, PyMongoError):
+        log.warning(
+            "link.failed",
+            link_token=token_fingerprint(link_token),
+            exc_info=True,
+        )
         return False
