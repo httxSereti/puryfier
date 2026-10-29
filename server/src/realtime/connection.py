@@ -19,6 +19,24 @@ from workers.outbound import drain_queued_messages
 
 log = get_logger(__name__)
 
+# Plugin API compatibility window advertised by the PuryFi SDK:
+# ``[1.0.0, 2.0.0)`` (minApiVersion / maxApiVersion in connection.ts).
+MIN_API_VERSION = (1, 0, 0)
+MAX_API_VERSION = (2, 0, 0)
+_SUPPORTED_API_VERSIONS = "[1.0.0, 2.0.0)"
+
+
+def _parse_api_version(value: object) -> tuple[int, int, int] | None:
+    """Parse an API version with the same three-part shape as the SDK."""
+    if not isinstance(value, str):
+        return None
+
+    parts = value.split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    return int(parts[0]), int(parts[1]), int(parts[2])
+
+
 __all__ = [
     "CENSORABLE_LABELS",
     "Connection",
@@ -65,6 +83,10 @@ class Connection:
 
         self.username: str | None = None
         self.ready = False
+        # Metadata advertised by PuryFi in `ready`, kept for diagnostics.
+        self.puryfi_version: str | None = None
+        self.api_version: str | None = None
+        self.instance_id: str | None = None
 
         self.intents_granted_event = asyncio.Event()
         self._ready_handled = False
@@ -323,12 +345,18 @@ class Connection:
         start_bootstrap = False
 
         if msg_type == "ready":
-            response = {"type": "ok"}
+            response = self._accept_ready(payload)
             # `ready` may be retried by the plugin: start the handshake and
-            # queue drain exactly once.
-            if not self._ready_handled:
+            # queue drain exactly once, and only for a compatible API version.
+            if response["type"] == "ok" and not self._ready_handled:
                 self._ready_handled = True
-                self.ready = True
+                log.info(
+                    "connection.ready",
+                    session_id=self.session.session_id,
+                    puryfi_version=self.puryfi_version,
+                    api_version=self.api_version,
+                    instance_id=self.instance_id,
+                )
                 await self._publish_status()
                 start_bootstrap = True
 
@@ -365,6 +393,45 @@ class Connection:
         # plugin frames until it received this acknowledgement.
         if start_bootstrap:
             self._spawn(self._bootstrap(), name="puryfi-bootstrap")
+
+    def _accept_ready(self, payload: dict) -> dict:
+        """Record `ready` metadata and validate the offered plugin API version.
+
+        The response follows the PuryFi runtime (and SDK) contract: errors use
+        the ``name`` key, unlike regular RPC error payloads.
+        """
+        version = payload.get("version")
+        api_version = payload.get("apiVersion")
+        instance_id = payload.get("instanceId")
+
+        if isinstance(version, str):
+            self.puryfi_version = version
+        if isinstance(api_version, str):
+            self.api_version = api_version
+        if isinstance(instance_id, str):
+            self.instance_id = instance_id
+
+        parsed = _parse_api_version(api_version)
+        if parsed is None or not MIN_API_VERSION <= parsed < MAX_API_VERSION:
+            log.warning(
+                "connection.incompatible_api_version",
+                session_id=self.session.session_id,
+                puryfi_version=version,
+                api_version=api_version,
+                supported_api_versions=_SUPPORTED_API_VERSIONS,
+                instance_id=instance_id,
+            )
+            return {
+                "type": "error",
+                "name": "incompatibleApiVersion",
+                "message": (
+                    "Puryfier requires a PuryFi plugin API version in "
+                    f"{_SUPPORTED_API_VERSIONS}, got {api_version!r}"
+                ),
+            }
+
+        self.ready = True
+        return {"type": "ok"}
 
     async def _bootstrap(self) -> None:
         """Run the handshake and initial queue drain once, under a timeout."""

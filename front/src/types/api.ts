@@ -23,4 +23,5 @@ export type ChasterExtensionSessionSchema = components["schemas"]["ChasterExtens
 export interface PuryfiRealtimeStatus {
     is_online: boolean;
     has_linked_plugin: boolean;
+    puryfi_version: string | null;
 }

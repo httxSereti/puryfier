@@ -41,6 +41,7 @@ test.describe("session page", () => {
                 role: "keyholder",
                 is_online: true,
                 has_linked_plugin: true,
+                puryfi_version: "0.8.7.1",
                 lock_password: "emergency-secret",
             }),
         );
@@ -48,6 +49,7 @@ test.describe("session page", () => {
         await page.goto(extensionUrl({ mainToken: MAIN_TOKEN }));
 
         await expect(page.getByText("Puryfi connected")).toBeVisible();
+        await expect(page.getByText("v0.8.7.1")).toBeVisible();
         await expect(page.getByText("keyholder", { exact: true })).toBeVisible();
         await expect(page.getByText("emergency-secret")).toHaveCount(0);
 

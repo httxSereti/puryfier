@@ -147,6 +147,8 @@ export interface components {
              * @default false
              */
             has_linked_plugin: boolean;
+            /** Puryfi Version */
+            puryfi_version?: string | null;
             /** Link Token */
             link_token?: string | null;
             /**
@@ -172,6 +174,8 @@ export interface components {
              * @default false
              */
             has_linked_plugin: boolean;
+            /** Puryfi Version */
+            puryfi_version?: string | null;
             /** Link Token */
             link_token?: string | null;
             config?: components["schemas"]["ChasterExtensionConfigSchema"] | null;

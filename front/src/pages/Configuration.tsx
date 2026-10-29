@@ -243,6 +243,9 @@ function ConnectionStatus({ data }: { data: ChasterExtensionConfigurationSchema 
                     <StatusPill tone={tone} dot={tone !== "neutral"} pulse={isOnline}>
                         {label}
                     </StatusPill>
+                    {isOnline && data.puryfi_version ? (
+                        <StatusPill tone="neutral">v{data.puryfi_version}</StatusPill>
+                    ) : null}
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-slate-400">{description}</p>
             </div>

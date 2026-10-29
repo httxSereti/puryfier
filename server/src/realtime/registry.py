@@ -86,6 +86,13 @@ class ConnectionManager:
         connection = self._connections.get(user_link_token)
         return connection is not None and connection.ready
 
+    def get_version(self, user_link_token: str) -> str | None:
+        """PuryFi version advertised during a completed handshake, if any."""
+        connection = self._connections.get(user_link_token)
+        if connection is None or not connection.ready:
+            return None
+        return connection.puryfi_version
+
     async def close_by_user_link_token(
         self, user_link_token: str, code: int = 1000
     ) -> bool:
@@ -104,10 +111,12 @@ class ConnectionManager:
 
     def status_for_lock_config(self, lock_config: LockSession) -> dict[str, Any]:
         """Current Puryfi link status, shaped for the extension UI sockets."""
+        link_token = lock_config.link_token or ""
         return {
             "type": "status",
-            "is_online": self.is_online(lock_config.link_token or ""),
+            "is_online": self.is_online(link_token),
             "has_linked_plugin": lock_config.has_linked_plugin,
+            "puryfi_version": self.get_version(link_token),
         }
 
     # Domain-friendly alias.

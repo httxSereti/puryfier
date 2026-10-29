@@ -65,6 +65,22 @@ describe("Configuration page", () => {
         expect(toggle).not.toBeChecked();
     });
 
+    it("shows the detected PuryFi version while online", async () => {
+        setChasterHash({ partnerConfigurationToken: "config-token" });
+        fetchConfigurationMock.mockResolvedValue(
+            makeConfiguration({
+                is_online: true,
+                has_linked_plugin: true,
+                puryfi_version: "0.8.7.1",
+            }),
+        );
+
+        render(<Configuration />);
+
+        expect(await screen.findByText("Puryfi is connected")).toBeInTheDocument();
+        expect(screen.getByText("v0.8.7.1")).toBeInTheDocument();
+    });
+
     it("renders the no-session state", async () => {
         setChasterHash({ partnerConfigurationToken: "config-token" });
         fetchConfigurationMock.mockResolvedValue(

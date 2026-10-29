@@ -53,11 +53,20 @@ describe("usePuryfiRealtimeStatus", () => {
         const socket = MockWebSocket.instances[0];
 
         await act(async () => {
-            socket.emitMessage({ type: "status", is_online: true, has_linked_plugin: true });
+            socket.emitMessage({
+                type: "status",
+                is_online: true,
+                has_linked_plugin: true,
+                puryfi_version: "0.8.7.1",
+            });
         });
 
         await waitFor(() =>
-            expect(result.current).toEqual({ is_online: true, has_linked_plugin: true }),
+            expect(result.current).toEqual({
+                is_online: true,
+                has_linked_plugin: true,
+                puryfi_version: "0.8.7.1",
+            }),
         );
 
         await act(async () => {
@@ -65,7 +74,11 @@ describe("usePuryfiRealtimeStatus", () => {
             socket.emitMessage("not an object");
         });
 
-        expect(result.current).toEqual({ is_online: true, has_linked_plugin: true });
+        expect(result.current).toEqual({
+            is_online: true,
+            has_linked_plugin: true,
+            puryfi_version: "0.8.7.1",
+        });
     });
 
     it("closes the socket on unmount", () => {

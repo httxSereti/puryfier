@@ -26,6 +26,12 @@ INTENTS = [
     "readMediaProcesses",
 ]
 
+READY_PAYLOAD = {
+    "version": "0.8.7.1",
+    "apiVersion": "1.0.0",
+    "instanceId": "test-instance",
+}
+
 
 @pytest.fixture(autouse=True)
 def clean_manager():
@@ -43,8 +49,16 @@ def rpc_response(request_msg: dict, payload: dict) -> bytes:
     return msgpack.packb({"responseId": request_msg["responseId"], "payload": payload})
 
 
-def send_ready(puryfi) -> None:
-    puryfi.send_bytes(msgpack.packb({"type": "ready", "payload": {}, "responseId": 999}))
+def send_ready(puryfi, payload: dict | None = None) -> None:
+    puryfi.send_bytes(
+        msgpack.packb(
+            {
+                "type": "ready",
+                "payload": payload or READY_PAYLOAD,
+                "responseId": 999,
+            }
+        )
+    )
 
 
 def answer_handshake(puryfi) -> None:
@@ -126,6 +140,36 @@ class TestLifecycle:
 
         assert manager.get_by_user_link_token("replace-token") is None
 
+    def test_incompatible_api_version_is_refused(
+        self, client, seed_lock_configuration
+    ):
+        """SDK review 3.4: validate `ready.apiVersion` and answer with `name`."""
+        seed_lock_configuration(
+            link_token="ws-api-v1", session_id="ws-api-session"
+        )
+
+        with client.websocket_connect("/ws/ws-api-v1") as puryfi:
+            send_ready(
+                puryfi,
+                {
+                    "version": "0.9.0",
+                    "apiVersion": "2.0.0",
+                    "instanceId": "other-instance",
+                },
+            )
+
+            response = msgpack.unpackb(puryfi.receive_bytes())
+            assert response["responseId"] == 999
+            assert response["payload"]["type"] == "error"
+            assert response["payload"]["name"] == "incompatibleApiVersion"
+            assert "[1.0.0, 2.0.0)" in response["payload"]["message"]
+
+            connection = manager.get_by_user_link_token("ws-api-v1")
+            assert connection is not None
+            assert connection.ready is False
+            assert connection.api_version == "2.0.0"
+            assert connection.instance_id == "other-instance"
+
     def test_malformed_frame_removes_connection(
         self, client, seed_lock_configuration
     ):
@@ -166,7 +210,7 @@ class TestQueueDrain:
         received_types: list[str] = []
 
         with client.websocket_connect("/ws/ws-tok-3") as ws:
-            ws.send_bytes(msgpack.packb({"type": "ready", "payload": {}, "responseId": 999}))
+            send_ready(ws)
 
             for _ in range(50):  # bounded pump: never hang the test
                 raw = ws.receive_bytes()
@@ -212,7 +256,7 @@ class TestQueueDrain:
         })
 
         with client.websocket_connect("/ws/ws-tok-4") as ws:
-            ws.send_bytes(msgpack.packb({"type": "ready", "payload": {}, "responseId": 999}))
+            send_ready(ws)
 
             for _ in range(50):
                 msg = msgpack.unpackb(ws.receive_bytes())
@@ -283,11 +327,7 @@ class TestLockReadiness:
 
             # The plugin now completes the handshake: the queued commands must
             # be drained without requiring a reconnect.
-            puryfi.send_bytes(
-                msgpack.packb(
-                    {"type": "ready", "payload": {}, "responseId": 999}
-                )
-            )
+            send_ready(puryfi)
 
             set_state_payloads: list[dict] = []
             for _ in range(100):
@@ -361,6 +401,7 @@ class TestRealtimeStatus:
                 "type": "status",
                 "is_online": False,
                 "has_linked_plugin": True,
+                "puryfi_version": None,
             }
 
             with client.websocket_connect("/ws/rt-token") as puryfi:
@@ -369,6 +410,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": True,
+                    "puryfi_version": "0.8.7.1",
                 }
 
                 # Close explicitly so the server cleanup is not canceled by
@@ -378,6 +420,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": False,
                     "has_linked_plugin": True,
+                    "puryfi_version": None,
                 }
 
     def test_watcher_gets_current_status_when_puryfi_is_already_online(
@@ -401,6 +444,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": True,
+                    "puryfi_version": "0.8.7.1",
                 }
 
     def test_plugin_handshake_marks_plugin_as_linked(
@@ -422,6 +466,7 @@ class TestRealtimeStatus:
                 "type": "status",
                 "is_online": False,
                 "has_linked_plugin": False,
+                "puryfi_version": None,
             }
 
             with client.websocket_connect("/ws/rt-token") as puryfi:
@@ -430,6 +475,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": False,
+                    "puryfi_version": "0.8.7.1",
                 }
 
                 answer_handshake(puryfi)
@@ -437,6 +483,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": True,
+                    "puryfi_version": "0.8.7.1",
                 }
 
                 puryfi.close()
@@ -444,6 +491,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": False,
                     "has_linked_plugin": True,
+                    "puryfi_version": None,
                 }
 
     def test_session_deleted_closes_plugin_and_watcher_sockets(
@@ -471,6 +519,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": True,
+                    "puryfi_version": "0.8.7.1",
                 }
 
                 payload = {
@@ -491,6 +540,7 @@ class TestRealtimeStatus:
                     "type": "status",
                     "is_online": False,
                     "has_linked_plugin": True,
+                    "puryfi_version": None,
                 }
                 # Drain frames queued before the close (ready response, init
                 # RPCs) until the close frame arrives.
@@ -534,6 +584,7 @@ class TestRealtimeStatus:
                 "type": "status",
                 "is_online": False,
                 "has_linked_plugin": True,
+                "puryfi_version": None,
             }
 
     def test_http_status_is_online_only_after_ready(
@@ -549,12 +600,14 @@ class TestRealtimeStatus:
         with client.websocket_connect("/ws/ready-token") as puryfi:
             before_ready = client.get("/api/session/main-token")
             assert before_ready.json()["is_online"] is False
+            assert before_ready.json()["puryfi_version"] is None
 
             send_ready(puryfi)
             puryfi.receive_bytes()
 
             after_ready = client.get("/api/session/main-token")
             assert after_ready.json()["is_online"] is True
+            assert after_ready.json()["puryfi_version"] == "0.8.7.1"
 
     def test_watcher_heartbeat_sends_ping(self, client, seed_lock_configuration, monkeypatch):
         seed_lock_configuration(

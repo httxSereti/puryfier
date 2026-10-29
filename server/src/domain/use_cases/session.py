@@ -33,6 +33,7 @@ def _session_response(
         role=role,
         is_online=puryfi.is_online(session.link_token or ""),
         has_linked_plugin=session.has_linked_plugin,
+        puryfi_version=puryfi.get_version(session.link_token or ""),
         link_token=link_token,
         config=session.config,
         lock_password=lock_password,

@@ -60,6 +60,7 @@ export function usePuryfiRealtimeStatus(
                         setStatus({
                             is_online: frame.is_online,
                             has_linked_plugin: frame.has_linked_plugin,
+                            puryfi_version: frame.puryfi_version ?? null,
                         });
                     }
                 } catch {

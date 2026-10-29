@@ -76,6 +76,7 @@ class ChasterExtensionConfigurationSchema(BaseModel):
     # Puryfi connection status
     is_online: bool = False
     has_linked_plugin: bool = False
+    puryfi_version: str | None = None
     link_token: str | None = None
 
     # Chaster extension configuration
@@ -94,6 +95,7 @@ class ChasterExtensionSessionSchema(BaseModel):
     # Puryfi connection status
     is_online: bool = False
     has_linked_plugin: bool = False
+    puryfi_version: str | None = None
     link_token: str | None = None
 
     # Lock configuration

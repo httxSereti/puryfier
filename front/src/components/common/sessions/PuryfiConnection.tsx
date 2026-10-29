@@ -23,6 +23,9 @@ export default function PuryfiConnection({ session }: { session: ChasterExtensio
                         <StatusPill tone="online" dot pulse>
                             Online
                         </StatusPill>
+                        {session.puryfi_version ? (
+                            <StatusPill tone="neutral">v{session.puryfi_version}</StatusPill>
+                        ) : null}
                     </div>
                     <p className="mt-1 text-xs leading-relaxed text-slate-400">
                         Your Puryfi client is linked to this lock and listening for censorship events.

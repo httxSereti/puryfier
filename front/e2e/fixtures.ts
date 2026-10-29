@@ -15,6 +15,7 @@ export interface E2ESession {
     role: string;
     is_online: boolean;
     has_linked_plugin: boolean;
+    puryfi_version?: string | null;
     link_token?: string | null;
     config?: E2EConfig | null;
     lock_password?: string | null;
@@ -25,6 +26,7 @@ export interface E2EConfiguration {
     role: string;
     is_online: boolean;
     has_linked_plugin: boolean;
+    puryfi_version?: string | null;
     link_token?: string | null;
     has_session: boolean;
     config?: E2EConfig | null;
@@ -46,6 +48,7 @@ export function makeSession(overrides: Partial<E2ESession> = {}): E2ESession {
         role: "wearer",
         is_online: false,
         has_linked_plugin: false,
+        puryfi_version: null,
         link_token: null,
         config: defaultConfig,
         lock_password: null,
@@ -61,6 +64,7 @@ export function makeConfiguration(
         role: "wearer",
         is_online: false,
         has_linked_plugin: false,
+        puryfi_version: null,
         link_token: null,
         has_session: true,
         config: defaultConfig,

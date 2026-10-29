@@ -84,7 +84,12 @@ class TestRevokeSession:
         assert watcher.close_codes == [SESSION_ENDED_CLOSE_CODE]
         # Watchers were told the plugin went offline before they were closed.
         assert watcher.messages == [
-            {"type": "status", "is_online": False, "has_linked_plugin": True}
+            {
+                "type": "status",
+                "is_online": False,
+                "has_linked_plugin": True,
+                "puryfi_version": None,
+            }
         ]
         assert (
             mongo_db["users_lock_configurations"].find_one(

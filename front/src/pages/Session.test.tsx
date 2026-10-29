@@ -48,6 +48,7 @@ describe("Session page", () => {
                 role: "keyholder",
                 is_online: true,
                 has_linked_plugin: true,
+                puryfi_version: "0.8.7.1",
                 lock_password: "emergency-secret",
             }),
         );
@@ -56,6 +57,7 @@ describe("Session page", () => {
         render(<Session />);
 
         expect(await screen.findByText("Puryfi connected")).toBeInTheDocument();
+        expect(screen.getByText("v0.8.7.1")).toBeInTheDocument();
         expect(screen.getByText("Emergency password")).toBeInTheDocument();
         expect(screen.queryByText("emergency-secret")).not.toBeInTheDocument();
 

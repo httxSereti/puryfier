@@ -275,6 +275,17 @@
             "title": "Has Linked Plugin",
             "default": false
           },
+          "puryfi_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Puryfi Version"
+          },
           "link_token": {
             "anyOf": [
               {
@@ -328,6 +339,17 @@
             "type": "boolean",
             "title": "Has Linked Plugin",
             "default": false
+          },
+          "puryfi_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Puryfi Version"
           },
           "link_token": {
             "anyOf": [

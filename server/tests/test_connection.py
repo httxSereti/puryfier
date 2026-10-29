@@ -17,6 +17,12 @@ from domain.entities import (
 from models.connection import Connection
 from realtime.protocol import intents as REQUIRED_INTENTS
 
+READY_PAYLOAD = {
+    "version": "0.8.7.1",
+    "apiVersion": "1.0.0",
+    "instanceId": "test-instance",
+}
+
 
 class FakeWebSocket:
     def __init__(self):
@@ -238,7 +244,9 @@ class TestReadyGuard:
             connection, ws = make_connection()
 
             await connection.handle_message(
-                msgpack.packb({"type": "ready", "payload": {}, "responseId": 42})
+                msgpack.packb(
+                    {"type": "ready", "payload": READY_PAYLOAD, "responseId": 42}
+                )
             )
             await wait_until(
                 lambda: any(
@@ -251,6 +259,10 @@ class TestReadyGuard:
                 "payload": {"type": "ok"},
                 "responseId": 42,
             }
+            assert connection.ready
+            assert connection.puryfi_version == "0.8.7.1"
+            assert connection.api_version == "1.0.0"
+            assert connection.instance_id == "test-instance"
             await connection.stop()
 
         run(scenario())
@@ -260,10 +272,14 @@ class TestReadyGuard:
             connection, ws = make_connection()
 
             await connection.handle_message(
-                msgpack.packb({"type": "ready", "payload": {}, "responseId": 1})
+                msgpack.packb(
+                    {"type": "ready", "payload": READY_PAYLOAD, "responseId": 1}
+                )
             )
             await connection.handle_message(
-                msgpack.packb({"type": "ready", "payload": {}, "responseId": 2})
+                msgpack.packb(
+                    {"type": "ready", "payload": READY_PAYLOAD, "responseId": 2}
+                )
             )
             await wait_until(
                 lambda: any(
@@ -278,6 +294,124 @@ class TestReadyGuard:
                 for message in ws.sent
             ) == 1
             assert connection.ready
+            await connection.stop()
+
+        run(scenario())
+
+    @pytest.mark.parametrize(
+        "api_version",
+        ["1.0.0", "1.4.2", "1.99.999"],
+        ids=["minimum", "patch", "upper-edge"],
+    )
+    def test_compatible_api_version_is_acknowledged(self, api_version):
+        """SDK review 3.4: the [1.0.0, 2.0.0) range must be accepted."""
+
+        async def scenario():
+            connection, ws = make_connection()
+            payload = {**READY_PAYLOAD, "apiVersion": api_version}
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {"type": "ready", "payload": payload, "responseId": 11}
+                )
+            )
+            await wait_until(
+                lambda: any(
+                    message.get("type") == "setPluginManifest"
+                    for message in ws.sent
+                )
+            )
+
+            assert ws.sent[0] == {
+                "payload": {"type": "ok"},
+                "responseId": 11,
+            }
+            assert connection.ready
+            assert connection.api_version == api_version
+            await connection.stop()
+
+        run(scenario())
+
+    @pytest.mark.parametrize(
+        "api_version",
+        ["0.9.9", "2.0.0", "2.1.0", "1.0", "1.0.0.0", "one.0.0", None],
+        ids=[
+            "below-minimum",
+            "maximum-exclusive",
+            "above-maximum",
+            "missing-patch",
+            "extra-part",
+            "non-numeric",
+            "missing",
+        ],
+    )
+    def test_incompatible_api_version_is_refused_without_handshake(self, api_version):
+        """SDK review 3.4: errors use `name`, and no handshake may start."""
+
+        async def scenario():
+            connection, ws = make_connection()
+            payload = {**READY_PAYLOAD, "apiVersion": api_version}
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {"type": "ready", "payload": payload, "responseId": 12}
+                )
+            )
+
+            assert len(ws.sent) == 1
+            response = ws.sent[0]
+            assert response["responseId"] == 12
+            assert response["payload"]["type"] == "error"
+            assert response["payload"]["name"] == "incompatibleApiVersion"
+            assert "[1.0.0, 2.0.0)" in response["payload"]["message"]
+            assert not connection.ready
+            # Metadata is still kept for diagnostics.
+            assert connection.puryfi_version == "0.8.7.1"
+            assert connection.instance_id == "test-instance"
+
+            # No handshake RPC may be sent after the refused ready.
+            await asyncio.sleep(0)
+            assert len(ws.sent) == 1
+            await connection.stop()
+
+        run(scenario())
+
+    def test_compatible_ready_after_incompatible_one_starts_handshake(self):
+        async def scenario():
+            connection, ws = make_connection()
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "ready",
+                        "payload": {**READY_PAYLOAD, "apiVersion": "2.0.0"},
+                        "responseId": 1,
+                    }
+                )
+            )
+            assert not connection.ready
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "ready",
+                        "payload": {**READY_PAYLOAD, "apiVersion": "1.2.3"},
+                        "responseId": 2,
+                    }
+                )
+            )
+            await wait_until(
+                lambda: any(
+                    message.get("type") == "setPluginManifest"
+                    for message in ws.sent
+                )
+            )
+
+            assert connection.ready
+            assert ws.sent[1] == {
+                "payload": {"type": "ok"},
+                "responseId": 2,
+            }
             await connection.stop()
 
         run(scenario())
