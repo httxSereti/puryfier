@@ -1,11 +1,28 @@
-from .extension_session_deleted import handle_extension_session_deleted
-from .extension_updated import handle_extension_updated
-from .lock_frozen import handle_lock_frozen
-from .lock_unfrozen import handle_lock_unfrozen
+"""Deprecated import path. Use :mod:`workers.handlers`.
 
-__all__ = [
-    "handle_extension_session_deleted",
-    "handle_extension_updated",
-    "handle_lock_frozen",
-    "handle_lock_unfrozen",
-]
+This compatibility module forwards attribute reads *and writes* to
+``workers.handlers`` so existing tests that monkeypatch a handler keep working
+while the worker imports the canonical module.
+"""
+
+import sys
+import types
+from pathlib import Path
+
+from workers import handlers as _handlers
+
+
+class _CompatModule(types.ModuleType):
+    def __getattr__(self, name: str):
+        return getattr(_handlers, name)
+
+    def __setattr__(self, name: str, value) -> None:
+        if name.startswith("__") and name.endswith("__"):
+            super().__setattr__(name, value)
+        else:
+            setattr(_handlers, name, value)
+
+
+_module = _CompatModule(__name__, __doc__)
+_module.__path__ = [str(Path(__file__).parent)]
+sys.modules[__name__] = _module

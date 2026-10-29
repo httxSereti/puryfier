@@ -5,20 +5,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from utils.logging_config import configure_logging
+from infra.logging import configure_logging
 
 configure_logging()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import close_db, init_db
-from routes import configuration, extensions, webhooks, websocket
-from routes.webhooks.chaster import validate_webhook_credentials
-from utils.chaster_api import close_chaster_client
-from utils.logging_config import get_logger
-from utils.redaction import install_access_log_redaction
-from utils.request_context import REQUEST_ID_HEADER, RequestContextMiddleware
+from api import configuration, realtime, session, webhooks
+from api.deps import validate_webhook_credentials
+from infra.chaster import close_chaster_client
+from infra.logging import get_logger
+from infra.mongo import close_db, init_db
+from infra.redaction import install_access_log_redaction
+from infra.request_context import REQUEST_ID_HEADER, RequestContextMiddleware
 from workers.webhook_inbox import webhook_worker
 
 log = get_logger(__name__)
@@ -72,9 +72,9 @@ app.add_middleware(
 # CORS errors) carries the request id and the redacted path.
 app.add_middleware(RequestContextMiddleware)
 
-app.include_router(websocket.router)
-app.include_router(webhooks.chaster.router)
-app.include_router(extensions.router)
+app.include_router(realtime.router)
+app.include_router(webhooks.router)
+app.include_router(session.router)
 app.include_router(configuration.router)
 
 if __name__ == "__main__":

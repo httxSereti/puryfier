@@ -6,9 +6,9 @@ import structlog
 from pymongo import ASCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from models.documents.webhook_inbox_entry import WebhookInboxEntry
-from utils.logging_config import get_logger
-from utils.redaction import redact_path
+from infra.documents.webhook_inbox_entry import WebhookInboxEntry
+from infra.logging import get_logger
+from infra.redaction import redact_path
 
 log = get_logger(__name__)
 
@@ -174,9 +174,9 @@ class WebhookInboxWorker:
         return WebhookInboxEntry.model_validate(document)
 
     async def _dispatch(self, entry: WebhookInboxEntry) -> None:
-        # Imported lazily to avoid a circular import at startup:
-        # routes.webhooks.chaster -> workers.webhook_inbox -> routes...
-        from routes.webhooks.actions import (
+        # Imported lazily to keep the worker import light and let tests replace
+        # a handler at runtime.
+        from workers.handlers import (
             handle_extension_session_deleted,
             handle_extension_updated,
             handle_lock_frozen,
@@ -201,6 +201,8 @@ class WebhookInboxWorker:
         action_type = (
             action_log.get("type") if isinstance(action_log, dict) else None
         )
+        if not isinstance(action_type, str):
+            return
 
         handlers = {
             "lock_frozen": handle_lock_frozen,

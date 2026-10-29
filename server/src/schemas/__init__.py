@@ -1,11 +1,17 @@
-from .chaster_extension_configuration_schema import (
+"""Deprecated import path. Use :mod:`domain.entities`."""
+
+from domain.entities import (
+    CensorPicsConfigSchema,
     ChasterExtensionConfigSchema,
     ChasterExtensionConfigurationSchema,
+    ChasterExtensionSessionSchema,
+    PuryfiObjectLabel,
 )
-from .chaster_extension_session_schema import ChasterExtensionSessionSchema
 
 __all__ = [
+    "CensorPicsConfigSchema",
     "ChasterExtensionConfigSchema",
     "ChasterExtensionConfigurationSchema",
     "ChasterExtensionSessionSchema",
+    "PuryfiObjectLabel",
 ]

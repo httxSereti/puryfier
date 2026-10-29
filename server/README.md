@@ -21,7 +21,7 @@ before being logged.
 Usage:
 
 ```python
-from utils.logging_config import get_logger
+from infra.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -32,3 +32,20 @@ log.exception("webhook.handler_failed", event_key=event_key)
 
 Use `domain.action` event names and keep variable data in fields rather than
 interpolating it into the event string.
+
+## Code layout
+
+The backend follows a layered layout (see `ARCHITECTURE_REVIEW.md`):
+
+| Directory   | Responsibility                                                        |
+| ----------- | --------------------------------------------------------------------- |
+| `api/`      | HTTP and WebSocket transport; routes delegate to use cases.           |
+| `domain/`   | Entities, events, ports and use cases. No FastAPI/Beanie/msgpack.     |
+| `infra/`    | Chaster client, MongoDB documents/repositories, logging and redaction.|
+| `realtime/` | Puryfi protocol, connection actor, registry and browser watchers.     |
+| `workers/`  | Durable webhook inbox and outbound queue drain.                       |
+| `container.py` | Process-wide composition root used until DI moves to `app.state`.  |
+
+Historical import paths (`models/`, `routes/`, `services/`, `schemas/`,
+`typings/`, `utils/`, `db.py`) are thin compatibility aliases for one release.
+New code must import from the layered paths above.

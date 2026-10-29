@@ -1,12 +1,7 @@
-from utils.logging_config import get_logger
+"""Deprecated import path. Use :mod:`workers.handlers`."""
 
-log = get_logger(__name__)
+import sys
 
+from workers import handlers as _handlers
 
-async def handle_extension_updated(payload: dict) -> dict:
-    """
-    Handle the 'extension_updated' event action from Chaster.
-    """
-    log.info("webhook.extension_updated")
-    # TODO: Implement extension_updated logic
-    return {"status": "ok", "action": "extension_updated_processed"}
+sys.modules[__name__] = _handlers

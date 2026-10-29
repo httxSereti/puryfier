@@ -1,0 +1,1 @@
+"""Framework-free business domain."""
