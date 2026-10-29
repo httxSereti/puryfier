@@ -1,9 +1,20 @@
+import asyncio
+import logging
 import os
+import random
 
 import httpx
 from fastapi import HTTPException
 
+from utils.redaction import redact_path
+
+logger = logging.getLogger(__name__)
+
 CHASTER_BASE_URL = "https://api.chaster.app"
+CHASTER_MAX_ATTEMPTS = 3
+CHASTER_RETRY_BASE_DELAY = 0.5
+CHASTER_RETRY_MAX_DELAY = 5.0
+CHASTER_RETRYABLE_STATUS_CODES = {408, 429}
 
 # One shared async client for all Chaster API calls (see REVIEW.md #4).
 # Always access it via the module (`chaster_api.chaster_client`) so tests can
@@ -23,6 +34,92 @@ async def close_chaster_client() -> None:
     await chaster_client.aclose()
 
 
+def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
+    if response is not None:
+        retry_after = response.headers.get("Retry-After", "")
+        if retry_after.isdigit():
+            return min(float(retry_after), CHASTER_RETRY_MAX_DELAY)
+
+    delay = min(
+        CHASTER_RETRY_BASE_DELAY * (2 ** (attempt - 1)),
+        CHASTER_RETRY_MAX_DELAY,
+    )
+    # Jitter avoids a thundering herd when several sessions retry together.
+    return delay + random.uniform(0, 0.25)
+
+
+async def request_chaster(method: str, path: str, **kwargs) -> httpx.Response:
+    """Call Chaster with bounded exponential backoff.
+
+    Retries transport errors, 408/429 and 5xx responses. Client errors (401,
+    404, 422, ...) are returned immediately to the caller.
+    """
+    for attempt in range(1, CHASTER_MAX_ATTEMPTS + 1):
+        try:
+            response = await chaster_client.request(method, path, **kwargs)
+        except httpx.TransportError as exc:
+            if attempt >= CHASTER_MAX_ATTEMPTS:
+                logger.error(
+                    "Chaster request failed permanently",
+                    extra={
+                        "chaster_method": method,
+                        "chaster_path": redact_path(path),
+                        "chaster_attempt": attempt,
+                        "chaster_error": type(exc).__name__,
+                    },
+                )
+                raise
+
+            delay = _retry_delay(attempt)
+            logger.warning(
+                "Retrying Chaster request after transport error",
+                extra={
+                    "chaster_method": method,
+                    "chaster_path": redact_path(path),
+                    "chaster_attempt": attempt,
+                    "chaster_error": type(exc).__name__,
+                    "chaster_retry_delay": round(delay, 3),
+                },
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        retryable_status = (
+            response.status_code in CHASTER_RETRYABLE_STATUS_CODES
+            or 500 <= response.status_code < 600
+        )
+        if not retryable_status:
+            return response
+
+        if attempt >= CHASTER_MAX_ATTEMPTS:
+            logger.error(
+                "Chaster request failed permanently",
+                extra={
+                    "chaster_method": method,
+                    "chaster_path": redact_path(path),
+                    "chaster_attempt": attempt,
+                    "chaster_status": response.status_code,
+                },
+            )
+            return response
+
+        delay = _retry_delay(attempt, response)
+        logger.warning(
+            "Retrying Chaster request",
+            extra={
+                "chaster_method": method,
+                "chaster_path": redact_path(path),
+                "chaster_attempt": attempt,
+                "chaster_status": response.status_code,
+                "chaster_retry_delay": round(delay, 3),
+            },
+        )
+        await asyncio.sleep(delay)
+
+    # The loop always returns/raises; this is only here for type checkers.
+    raise RuntimeError("Chaster retry loop exited unexpectedly")
+
+
 async def get_session_auth(main_token: str) -> dict:
     """
     GET /api/extensions/auth/sessions/{main_token}
@@ -31,7 +128,9 @@ async def get_session_auth(main_token: str) -> dict:
     upstream status code on failure.
     """
     try:
-        response = await chaster_client.get(f"/api/extensions/auth/sessions/{main_token}")
+        response = await request_chaster(
+            "GET", f"/api/extensions/auth/sessions/{main_token}"
+        )
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
@@ -62,12 +161,17 @@ async def create_custom_log(session_id: str, title: str, description: str, role:
     }
 
     try:
-        response = await chaster_client.post(
+        response = await request_chaster(
+            "POST",
             f"/api/extensions/sessions/{session_id}/logs/custom",
             json=payload,
         )
         response.raise_for_status()
         return True
-    except httpx.HTTPError as e:
-        print(f"[Chaster] Error creating custom log: {e}")
+    except httpx.HTTPError:
+        logger.warning(
+            "Could not create Chaster custom log",
+            extra={"chaster_session_id": session_id},
+            exc_info=True,
+        )
         return False

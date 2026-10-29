@@ -20,8 +20,8 @@ async def configuration(configuration_token: str):
     data: PartnerConfigurationForPublic | None = None
 
     try:
-        response = await chaster_api.chaster_client.get(
-            f"/api/extensions/configurations/{configuration_token}"
+        response = await chaster_api.request_chaster(
+            "GET", f"/api/extensions/configurations/{configuration_token}"
         )
         response.raise_for_status()
         data = PartnerConfigurationForPublic(**response.json())
@@ -39,12 +39,19 @@ async def configuration(configuration_token: str):
     except (TypeError, ValueError) as e:
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
+    try:
+        chaster_config = ChasterExtensionConfigSchema(**(data.config or {}))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(
+            status_code=502, detail="Invalid configuration from Chaster"
+        ) from e
+
     # no lock active, shared-lock or self-lock so use chaster to save configuration
     if not data.sessionId:
         return ChasterExtensionConfigurationSchema(
             id="",
             role=data.role,
-            config=data.config,
+            config=chaster_config,
             has_session=False
         )   
     
@@ -54,17 +61,21 @@ async def configuration(configuration_token: str):
         lock_config = await get_or_create_lock_configuration(
             data.sessionId,
             # Use the config from Chaster (self-lock or shared-lock).
-            config=data.config or ChasterExtensionConfigSchema(),
+            config=chaster_config,
         )
     except (CollectionWasNotInitialized, PyMongoError) as e:
         raise HTTPException(status_code=500, detail="Unable to fetch lock_config") from e
+    except (TypeError, ValueError) as e:
+        raise HTTPException(
+            status_code=502, detail="Invalid configuration from Chaster"
+        ) from e
     
     if data.role == "wearer":
         configuration = ChasterExtensionConfigurationSchema(
             id=str(lock_config.id),
             role=data.role,
             has_linked_plugin=lock_config.has_linked_plugin,
-            is_online=manager.get_by_user_link_token(lock_config.link_token or "") is not None,
+            is_online=manager.is_online(lock_config.link_token or ""),
             link_token=lock_config.link_token,
             has_session=True,
             config=lock_config.config,
@@ -76,7 +87,7 @@ async def configuration(configuration_token: str):
             id=str(lock_config.id),
             role=data.role,
             has_linked_plugin=lock_config.has_linked_plugin,
-            is_online=manager.get_by_user_link_token(lock_config.link_token or "") is not None,
+            is_online=manager.is_online(lock_config.link_token or ""),
             has_session=True,
             config=lock_config.config,
         )
@@ -84,14 +95,21 @@ async def configuration(configuration_token: str):
         return configuration
 
 @router.put("/{configuration_token}")
-async def update_configuration(configuration_token: str, payload: dict):
+async def update_configuration(
+    configuration_token: str, payload: ChasterExtensionConfigSchema
+):
     """
-        Update the configuration of the extension
+        Update the configuration of the extension.
+
+        The body is validated before Chaster is called, and the validated
+        payload is the local source of truth even if Chaster omits `config`
+        from its response.
     """
     try:
-        response = await chaster_api.chaster_client.put(
+        response = await chaster_api.request_chaster(
+            "PUT",
             f"/api/extensions/configurations/{configuration_token}",
-            json={"config": payload}
+            json={"config": payload.model_dump()},
         )
         response.raise_for_status()
 
@@ -109,10 +127,12 @@ async def update_configuration(configuration_token: str, payload: dict):
             if lock_config:
                 print(f"[config-put] found lock_config id: {lock_config.id}")
 
-                lock_config.config = data.get("config")
+                lock_config.config = payload
                 await lock_config.save()
 
-                manager.update_cached_config(lock_config.link_token or "", lock_config.config)
+                await manager.update_cached_config(
+                    lock_config.link_token or "", lock_config.config
+                )
                 print(f"[DB] Updated UserLockConfiguration for session {session_id!r}")
             else:
                 print(f"[config-put] NO lock_config found for session_id: {session_id}")

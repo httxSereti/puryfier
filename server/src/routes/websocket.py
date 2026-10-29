@@ -1,3 +1,6 @@
+import asyncio
+import logging
+
 import httpx
 from beanie.exceptions import CollectionWasNotInitialized
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
@@ -10,7 +13,13 @@ from models.session_watchers import watchers
 from utils import chaster_api
 from utils.redaction import token_fingerprint
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/ws")
+
+# Browser watchers only receive pushes, so a period of silence is normal.
+# Send an application-level ping so dead sockets are detected and removed.
+WATCHER_HEARTBEAT_SECONDS = 30.0
 
 
 async def watch_session(
@@ -28,11 +37,19 @@ async def watch_session(
         await websocket.send_json(manager.status_for_lock_config(lock_config))
 
         while True:
-            # The page only listens. Receiving lets us notice the disconnect
-            # promptly (and tolerates app-level keepalives).
-            await websocket.receive_text()
+            try:
+                # The page only listens; use a timeout to send heartbeats and
+                # detect sockets that silently died.
+                await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=WATCHER_HEARTBEAT_SECONDS,
+                )
+            except TimeoutError:
+                await websocket.send_json({"type": "ping"})
     except WebSocketDisconnect:
         pass
+    except Exception:
+        logger.debug("Session watcher failed", exc_info=True)
     finally:
         watchers.remove(session_id, websocket)
 
@@ -84,8 +101,8 @@ async def session_status_endpoint(websocket: WebSocket, main_token: str):
 async def configuration_status_endpoint(websocket: WebSocket, configuration_token: str):
     """Realtime Puryfi status for the extension configuration page."""
     try:
-        response = await chaster_api.chaster_client.get(
-            f"/api/extensions/configurations/{configuration_token}"
+        response = await chaster_api.request_chaster(
+            "GET", f"/api/extensions/configurations/{configuration_token}"
         )
         response.raise_for_status()
         data = response.json()
@@ -158,13 +175,14 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
 
     # connect WebSocket
     connection = Connection(websocket, user_lock_config)
-    await manager.add(connection, user_link_token)
-
-    print(
-        "[WS-Puryfi] Connection established for token "
-        f"{token_fingerprint(user_link_token)}"
-    )
+    await connection.start()
     try:
+        await manager.add(connection, user_link_token)
+
+        print(
+            "[WS-Puryfi] Connection established for token "
+            f"{token_fingerprint(user_link_token)}"
+        )
         while True:
             data = await websocket.receive_bytes()
             await connection.handle_message(data)
@@ -182,9 +200,20 @@ async def websocket_endpoint(websocket: WebSocket, user_link_token: str):
         except RuntimeError:
             pass  # already closed
     finally:
-        await manager.remove(user_link_token, connection)
-        connection.fail_pending("connection closed")
-        print(
-            "[WS-Puryfi] Connection closed for token "
-            f"{token_fingerprint(user_link_token)}"
-        )
+        # TestClient/uvicorn may cancel the endpoint task as soon as the
+        # client disconnects. Shield the cleanup so the offline status is
+        # still published and the connection is unregistered.
+        async def _cleanup() -> None:
+            await connection.stop()
+            await manager.remove(user_link_token, connection)
+            print(
+                "[WS-Puryfi] Connection closed for token "
+                f"{token_fingerprint(user_link_token)}"
+            )
+
+        cleanup_task = asyncio.create_task(_cleanup(), name="puryfi-cleanup")
+        try:
+            await asyncio.shield(cleanup_task)
+        except asyncio.CancelledError:
+            await cleanup_task
+            raise

@@ -43,14 +43,18 @@ async def handle_lock_frozen(payload: dict) -> dict:
             "[lock_frozen] Found connection for token "
             f"{token_fingerprint(lock_config.link_token)}"
         )
-        # enable Puryfi
-        await connection.send_message("setState", {"path": "enabled", "value": True})
-        await connection.send_message("setState", {
-            "path": "lockConfiguration", 
-            "value": {
-                "password": {"secret": generated_password}
-            }
-        })
+        # Send both state changes as one ordered mailbox batch: no other
+        # command can interleave between enabling Puryfi and setting its lock.
+        await connection.send_messages([
+            ("setState", {"path": "enabled", "value": True}),
+            (
+                "setState",
+                {
+                    "path": "lockConfiguration",
+                    "value": {"password": {"secret": generated_password}},
+                },
+            ),
+        ])
     
         return {"status": "ok", "action": "lock_frozen_processed"}
     else:

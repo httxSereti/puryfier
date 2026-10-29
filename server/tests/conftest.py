@@ -103,6 +103,7 @@ def seed_lock_configuration(mongo_db):
             "keyholder_id": None,
             "wearer_id": None,
             "puryfi_username": None,
+            "seen_censored_objects": 0,
             "lock_password": None,
             "config": {
                 "lock_on_freeze": lock_on_freeze,

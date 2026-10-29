@@ -30,6 +30,10 @@ class UserLockConfiguration(Document):
     # Puryfi username
     puryfi_username: str | None = None
 
+    # Number of censored media scans since the last successful time penalty.
+    # Persisted so reconnects/restarts do not lose progress.
+    seen_censored_objects: int = 0
+
     # Configurations
     # Conscious decision (REVIEW.md #13): lock_password is stored in cleartext
     # because it must be retrievable to send to the Puryfi client on

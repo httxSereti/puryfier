@@ -13,9 +13,11 @@ from services.session_lifecycle import SESSION_ENDED_CLOSE_CODE, revoke_session
 @pytest.fixture(autouse=True)
 def clean_runtime_state():
     manager._connections.clear()
+    manager._locks.clear()
     watchers._watchers.clear()
     yield
     manager._connections.clear()
+    manager._locks.clear()
     watchers._watchers.clear()
 
 

@@ -1,21 +1,24 @@
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CensorPicsConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    limit_count: int = 100
-    added_duration: int = 600
+    limit_count: int = Field(default=100, ge=1, le=10_000)
+    added_duration: int = Field(default=600, ge=1, le=604_800)
     enabled: bool = False
+
 
 class ChasterExtensionConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     lock_on_freeze: bool = False
     unlock_on_unfreeze: bool = False
-    
-    censorPicsConfig: CensorPicsConfigSchema = CensorPicsConfigSchema()
+
+    censorPicsConfig: CensorPicsConfigSchema = Field(
+        default_factory=CensorPicsConfigSchema
+    )
 
 class ChasterExtensionConfigurationSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)

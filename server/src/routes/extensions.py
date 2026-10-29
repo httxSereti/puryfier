@@ -32,18 +32,25 @@ async def fetch_session(main_token: str):
     wearer = data.get("session", {}).get("lock", {}).get("user")
     wearer_id: str | None = wearer.get("_id") if isinstance(wearer, dict) else None
 
+    try:
+        config = ChasterExtensionConfigSchema(
+            **data.get("session", {}).get("config", {}),
+        )
+    except (TypeError, ValueError) as e:
+        raise HTTPException(
+            status_code=502, detail="Invalid configuration from Chaster"
+        ) from e
+
     lock_config = await get_or_create_lock_configuration(
         session_id,
-        config=ChasterExtensionConfigSchema(
-            **data.get("session", {}).get("config", {}),
-        ),
+        config=config,
         lock_id=lock_id or None,
         keyholder_id=keyholder_id,
         wearer_id=wearer_id,
     )
 
-    # get if there is an active connection to this session
-    is_online = manager.get_by_user_link_token(lock_config.link_token or "")
+    # Get if there is an active, fully-ready connection to this session.
+    is_online = manager.is_online(lock_config.link_token or "")
 
     role = data.get("role", "")
 
@@ -54,7 +61,7 @@ async def fetch_session(main_token: str):
     return ChasterExtensionSessionSchema(
         id=str(lock_config.id),
         role=role,
-        is_online=is_online is not None,
+        is_online=is_online,
         has_linked_plugin=lock_config.has_linked_plugin,
         # link_token only to the wearer: they own the Puryfi client, and
         # whoever holds the token owns the connection slot (REVIEW.md #8).

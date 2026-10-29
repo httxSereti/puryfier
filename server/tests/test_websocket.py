@@ -10,6 +10,7 @@ import msgpack
 import pytest
 from conftest import WEBHOOK_AUTH
 from starlette.websockets import WebSocketDisconnect
+from test_extensions import make_chaster_response
 from test_webhooks_chaster import wait_for_inbox
 
 from models.connection_manager import manager
@@ -30,14 +31,45 @@ INTENTS = [
 def clean_manager():
     """The ConnectionManager and watchers are process-wide singletons: isolate tests."""
     manager._connections.clear()
+    manager._locks.clear()
     watchers._watchers.clear()
     yield
     manager._connections.clear()
+    manager._locks.clear()
     watchers._watchers.clear()
 
 
 def rpc_response(request_msg: dict, payload: dict) -> bytes:
     return msgpack.packb({"responseId": request_msg["responseId"], "payload": payload})
+
+
+def send_ready(puryfi) -> None:
+    puryfi.send_bytes(msgpack.packb({"type": "ready", "payload": {}, "responseId": 999}))
+
+
+def answer_handshake(puryfi) -> None:
+    """Answer the server's init RPCs so the plugin becomes fully ready."""
+    for _ in range(50):
+        message = msgpack.unpackb(puryfi.receive_bytes())
+        if "type" not in message:
+            continue  # response to the `ready` message itself
+
+        msg_type = message["type"]
+        if msg_type == "getPluginIntents":
+            puryfi.send_bytes(
+                rpc_response(message, {"type": "ok", "intents": INTENTS})
+            )
+        elif msg_type == "getState":
+            puryfi.send_bytes(
+                rpc_response(message, {"type": "ok", "value": "test-user"})
+            )
+        else:
+            puryfi.send_bytes(rpc_response(message, {"type": "ok"}))
+
+        if msg_type == "subscribeToStaticMediaScans":
+            return
+
+    raise AssertionError("Puryfi handshake did not complete")
 
 
 class TestLifecycle:
@@ -54,10 +86,45 @@ class TestLifecycle:
     ):
         seed_lock_configuration(link_token="ws-tok-1", session_id="ws-session-1")
 
-        with client.websocket_connect("/ws/ws-tok-1"):
+        with client.websocket_connect("/ws/ws-tok-1") as ws:
             assert manager.get_by_user_link_token("ws-tok-1") is not None
+            ws.close()
+            for _ in range(100):
+                if manager.get_by_user_link_token("ws-tok-1") is None:
+                    break
+                time.sleep(0.01)
 
         assert manager.get_by_user_link_token("ws-tok-1") is None
+
+    def test_new_connection_replaces_and_closes_the_old_socket(
+        self, client, seed_lock_configuration
+    ):
+        seed_lock_configuration(
+            session_id="replace-session", link_token="replace-token"
+        )
+
+        with client.websocket_connect("/ws/replace-token") as first:
+            first_connection = manager.get_by_user_link_token("replace-token")
+            assert first_connection is not None
+
+            with client.websocket_connect("/ws/replace-token"):
+                for _ in range(100):
+                    if (
+                        manager.get_by_user_link_token("replace-token")
+                        is not first_connection
+                    ):
+                        break
+                    time.sleep(0.01)
+
+                assert (
+                    manager.get_by_user_link_token("replace-token")
+                    is not first_connection
+                )
+                with pytest.raises(WebSocketDisconnect) as exc_info:
+                    first.receive_bytes()
+                assert exc_info.value.code == 4001
+
+        assert manager.get_by_user_link_token("replace-token") is None
 
     def test_malformed_frame_removes_connection(
         self, client, seed_lock_configuration
@@ -194,18 +261,22 @@ class TestRealtimeStatus:
                 "has_linked_plugin": True,
             }
 
-            with client.websocket_connect("/ws/rt-token"):
+            with client.websocket_connect("/ws/rt-token") as puryfi:
+                send_ready(puryfi)
                 assert watcher.receive_json() == {
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": True,
                 }
 
-            assert watcher.receive_json() == {
-                "type": "status",
-                "is_online": False,
-                "has_linked_plugin": True,
-            }
+                # Close explicitly so the server cleanup is not canceled by
+                # the TestClient context exit.
+                puryfi.close()
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": False,
+                    "has_linked_plugin": True,
+                }
 
     def test_watcher_gets_current_status_when_puryfi_is_already_online(
         self, client, seed_lock_configuration, monkeypatch
@@ -217,15 +288,18 @@ class TestRealtimeStatus:
 
         monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
 
-        with (
-            client.websocket_connect("/ws/rt-token"),
-            client.websocket_connect("/ws/session/main-token") as watcher,
-        ):
-            assert watcher.receive_json() == {
-                "type": "status",
-                "is_online": True,
-                "has_linked_plugin": True,
-            }
+        with client.websocket_connect("/ws/rt-token") as puryfi:
+            send_ready(puryfi)
+            # The first frame is the server's response to `ready`; receiving
+            # it guarantees the ready state was processed.
+            puryfi.receive_bytes()
+
+            with client.websocket_connect("/ws/session/main-token") as watcher:
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": True,
+                    "has_linked_plugin": True,
+                }
 
     def test_plugin_handshake_marks_plugin_as_linked(
         self, client, seed_lock_configuration, monkeypatch
@@ -249,26 +323,26 @@ class TestRealtimeStatus:
             }
 
             with client.websocket_connect("/ws/rt-token") as puryfi:
+                send_ready(puryfi)
                 assert watcher.receive_json() == {
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": False,
                 }
 
-                puryfi.send_bytes(
-                    msgpack.packb({"type": "ready", "payload": {}, "responseId": 999})
-                )
+                answer_handshake(puryfi)
                 assert watcher.receive_json() == {
                     "type": "status",
                     "is_online": True,
                     "has_linked_plugin": True,
                 }
 
-            assert watcher.receive_json() == {
-                "type": "status",
-                "is_online": False,
-                "has_linked_plugin": True,
-            }
+                puryfi.close()
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": False,
+                    "has_linked_plugin": True,
+                }
 
     def test_session_deleted_closes_plugin_and_watcher_sockets(
         self, client, seed_lock_configuration, mongo_db, monkeypatch
@@ -290,6 +364,12 @@ class TestRealtimeStatus:
 
             with client.websocket_connect("/ws/rt-token") as puryfi:
                 assert manager.get_by_user_link_token("rt-token") is not None
+                send_ready(puryfi)
+                assert watcher.receive_json() == {
+                    "type": "status",
+                    "is_online": True,
+                    "has_linked_plugin": True,
+                }
 
                 payload = {
                     "event": "extension_session.deleted",
@@ -304,24 +384,22 @@ class TestRealtimeStatus:
                     mongo_db, "extension_session.deleted:realtime-session"
                 )
 
-                # The plugin connection published "online"; deletion then
-                # publishes "offline" before closing both sockets.
-                assert watcher.receive_json() == {
-                    "type": "status",
-                    "is_online": True,
-                    "has_linked_plugin": True,
-                }
+                # Deletion publishes "offline" before closing both sockets.
                 assert watcher.receive_json() == {
                     "type": "status",
                     "is_online": False,
                     "has_linked_plugin": True,
                 }
+                # Drain frames queued before the close (ready response, init
+                # RPCs) until the close frame arrives.
                 with pytest.raises(WebSocketDisconnect) as puryfi_closed:
-                    puryfi.receive_bytes()
+                    for _ in range(20):
+                        puryfi.receive_bytes()
                 assert puryfi_closed.value.code == 4004
 
                 with pytest.raises(WebSocketDisconnect) as watcher_closed:
-                    watcher.receive_json()
+                    for _ in range(20):
+                        watcher.receive_json()
                 assert watcher_closed.value.code == 4004
 
         assert manager.get_by_user_link_token("rt-token") is None
@@ -332,6 +410,8 @@ class TestRealtimeStatus:
         seed_lock_configuration(session_id="realtime-session", link_token="rt-token")
 
         class FakeResponse:
+            status_code = 200
+
             def raise_for_status(self) -> None:
                 pass
 
@@ -339,7 +419,7 @@ class TestRealtimeStatus:
                 return {"sessionId": "realtime-session", "role": "wearer"}
 
         class FakeChasterClient:
-            async def get(self, _url: str) -> FakeResponse:
+            async def request(self, _method: str, _url: str, **_kwargs) -> FakeResponse:
                 return FakeResponse()
 
             async def aclose(self) -> None:
@@ -353,6 +433,41 @@ class TestRealtimeStatus:
                 "is_online": False,
                 "has_linked_plugin": True,
             }
+
+    def test_http_status_is_online_only_after_ready(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_lock_configuration(
+            session_id="ready-session", link_token="ready-token"
+        )
+        mock_chaster_api(
+            make_chaster_response(role="wearer", session_id="ready-session")
+        )
+
+        with client.websocket_connect("/ws/ready-token") as puryfi:
+            before_ready = client.get("/api/session/main-token")
+            assert before_ready.json()["is_online"] is False
+
+            send_ready(puryfi)
+            puryfi.receive_bytes()
+
+            after_ready = client.get("/api/session/main-token")
+            assert after_ready.json()["is_online"] is True
+
+    def test_watcher_heartbeat_sends_ping(self, client, seed_lock_configuration, monkeypatch):
+        seed_lock_configuration(
+            session_id="heartbeat-session", link_token="heartbeat-token"
+        )
+        monkeypatch.setattr("routes.websocket.WATCHER_HEARTBEAT_SECONDS", 0.05)
+
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "heartbeat-session"}}
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+
+        with client.websocket_connect("/ws/session/main-token") as watcher:
+            assert watcher.receive_json()["type"] == "status"
+            assert watcher.receive_json() == {"type": "ping"}
 
     def test_unknown_session_is_rejected(self, client, monkeypatch):
         async def fake_get_session_auth(_main_token: str) -> dict:

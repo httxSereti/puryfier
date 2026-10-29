@@ -33,6 +33,21 @@ class TestUserLockConfigurationIndexes:
         # mongomock does not implement partialFilterExpression, so the
         # declaration above is the meaningful assertion in tests.
 
+    def test_two_sessions_without_link_token_can_coexist(
+        self, client, seed_lock_configuration, mongo_db
+    ):
+        """Partial-index behavior: unlinked configurations are not in conflict.
+
+        mongomock does not implement partialFilterExpression, so drop its
+        approximation of the index for this insertion test; the declaration
+        itself is asserted above.
+        """
+        mongo_db["users_lock_configurations"].drop_index("link_token_1")
+        seed_lock_configuration(session_id="session-1", link_token=None)
+        seed_lock_configuration(session_id="session-2", link_token=None)
+
+        assert mongo_db["users_lock_configurations"].count_documents({}) == 2
+
     def test_session_id_is_unique(self, client, seed_lock_configuration):
         seed_lock_configuration(session_id="session-1", link_token="token-1")
 

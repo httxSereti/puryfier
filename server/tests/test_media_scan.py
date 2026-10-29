@@ -12,6 +12,7 @@ import pytest
 
 import models.connection as connection_module
 from models.connection import Connection
+from models.documents import UserLockConfiguration
 from typings.puryfi_enums import PuryfiObjectLabel
 
 
@@ -100,6 +101,80 @@ class TestMediaScanCounting:
         ])))
 
         assert conn.seen_censored_objects == 1
+
+    def test_counter_is_persisted_and_only_reset_after_success(
+        self, client, seed_lock_configuration, mongo_db, monkeypatch
+    ):
+        session_id = "persisted-session"
+        seed_lock_configuration(
+            session_id=session_id,
+            link_token="tok-persisted",
+            seen_censored_objects=1,
+            config={
+                "lock_on_freeze": True,
+                "unlock_on_unfreeze": True,
+                "censorPicsConfig": {
+                    "limit_count": 2,
+                    "added_duration": 600,
+                    "enabled": True,
+                },
+            },
+        )
+
+        outcomes = [False, True]
+        calls: list[tuple[str, int]] = []
+
+        async def fake_add_time(called_session: str, duration: int) -> bool:
+            calls.append((called_session, duration))
+            return outcomes.pop(0)
+
+        async def fake_log(*_args, **_kwargs) -> bool:
+            return True
+
+        monkeypatch.setattr(connection_module, "add_time_to_lock", fake_add_time)
+        monkeypatch.setattr(connection_module, "create_custom_log", fake_log)
+
+        async def scenario():
+            lock = await UserLockConfiguration.find_one(
+                UserLockConfiguration.session_id == session_id
+            )
+            assert lock is not None
+            connection = Connection(FakeWebSocket(), lock)
+            assert connection.seen_censored_objects == 1
+
+            # First penalty attempt fails: the counter must stay persisted.
+            await connection.handle_message(
+                scan_message([PuryfiObjectLabel.Buttocks])
+            )
+            stored = await UserLockConfiguration.find_one(
+                UserLockConfiguration.session_id == session_id
+            )
+            assert stored is not None
+            assert stored.seen_censored_objects == 2
+
+            # Reconnect: progress survives.
+            connection = Connection(FakeWebSocket(), stored)
+            assert connection.seen_censored_objects == 2
+
+            # Second attempt succeeds: only now is the counter reset.
+            await connection.handle_message(
+                scan_message([PuryfiObjectLabel.Buttocks])
+            )
+            stored = await UserLockConfiguration.find_one(
+                UserLockConfiguration.session_id == session_id
+            )
+            assert stored is not None
+            assert stored.seen_censored_objects == 0
+
+        asyncio.run(scenario())
+
+        assert calls == [(session_id, 600), (session_id, 600)]
+        assert (
+            mongo_db["users_lock_configurations"].find_one(
+                {"session_id": session_id}
+            )["seen_censored_objects"]
+            == 0
+        )
 
     def test_disabled_feature_counts_nothing(self, mock_add_time, monkeypatch):
         conn = make_connection()
