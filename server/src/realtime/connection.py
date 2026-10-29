@@ -84,6 +84,9 @@ class Connection:
         self._mailbox: asyncio.Queue[_MailboxCommand] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
         self._send_lock = asyncio.Lock()
+        # Serialize queue drains: the bootstrap, the `intentsGrant` handler and
+        # webhook-triggered flushes must never deliver the same command twice.
+        self._drain_lock = asyncio.Lock()
         self._closed = False
 
     # Seconds to wait for a Puryfi client response before failing the RPC.
@@ -103,6 +106,15 @@ class Connection:
     @property
     def user_link_token(self) -> str:
         return self.session.link_token or ""
+
+    @property
+    def intents_granted(self) -> bool:
+        return self.intents_granted_event.is_set()
+
+    @property
+    def can_send_protected(self) -> bool:
+        """True once PuryFi completed the handshake and granted our intents."""
+        return not self._closed and self.ready and self.intents_granted
 
     @property
     def seen_censored_objects(self) -> int:
@@ -308,6 +320,7 @@ class Connection:
         payload = message.get("payload", {})
         response_id = message.get("responseId")
         response = None
+        start_bootstrap = False
 
         if msg_type == "ready":
             response = {"type": "ok"}
@@ -317,7 +330,7 @@ class Connection:
                 self._ready_handled = True
                 self.ready = True
                 await self._publish_status()
-                self._spawn(self._bootstrap(), name="puryfi-bootstrap")
+                start_bootstrap = True
 
         elif msg_type == "configurationChange":
             configuration = payload.get("configuration", self.configuration)
@@ -325,9 +338,16 @@ class Connection:
 
         elif msg_type == "intentsGrant":
             granted_intents = payload.get("intents", [])
-            required_intents = intents
-            if all(intent in granted_intents for intent in required_intents):
+            if all(intent in granted_intents for intent in intents):
+                newly_granted = not self.intents_granted_event.is_set()
                 self.intents_granted_event.set()
+                # Commands queued while intents were missing must not wait for
+                # a reconnect: drain them as soon as the grant arrives.
+                if newly_granted and self.ready:
+                    self._spawn(
+                        self.flush_queue(),
+                        name="puryfi-intents-drain",
+                    )
 
         elif msg_type == "staticMediaScan":
             objects = payload.get("objects", [])
@@ -340,6 +360,11 @@ class Connection:
 
         if response_id is not None and response is not None:
             await self.send_response(response_id, response)
+
+        # Only now may the handshake RPCs reach PuryFi: the runtime ignores
+        # plugin frames until it received this acknowledgement.
+        if start_bootstrap:
+            self._spawn(self._bootstrap(), name="puryfi-bootstrap")
 
     async def _bootstrap(self) -> None:
         """Run the handshake and initial queue drain once, under a timeout."""
@@ -476,12 +501,40 @@ class Connection:
         self.session.has_linked_plugin = session.has_linked_plugin
         await self._publish_status()
 
-    async def process_queued_messages(self, user_link_token: str) -> None:
+    async def flush_queue(self) -> bool:
+        """Deliver durable commands if the plugin is ready and intents granted.
+
+        Never waits for readiness: when the plugin is not ready yet, the
+        commands stay queued and the bootstrap (or the next ``intentsGrant``)
+        drains them. Returns True only when every queued message was delivered.
+        """
+        if not self.can_send_protected:
+            return False
+
+        async with self._drain_lock:
+            # Readiness may have changed while waiting for the lock (e.g. the
+            # socket closed): re-check before touching the queue.
+            if not self.can_send_protected:
+                return False
+            return await drain_queued_messages(
+                connection=self,
+                queue=self._queue,
+                sessions=self._sessions,
+                link_token=self.user_link_token,
+                intents_timeout=self.INTENTS_TIMEOUT_SECONDS,
+                wait_for_intents=False,
+            )
+
+    async def process_queued_messages(
+        self, user_link_token: str, *, wait_for_intents: bool = True
+    ) -> bool:
         """Drain durable messages through the outbound worker."""
-        await drain_queued_messages(
-            connection=self,
-            queue=self._queue,
-            sessions=self._sessions,
-            link_token=user_link_token,
-            intents_timeout=self.INTENTS_TIMEOUT_SECONDS,
-        )
+        async with self._drain_lock:
+            return await drain_queued_messages(
+                connection=self,
+                queue=self._queue,
+                sessions=self._sessions,
+                link_token=user_link_token,
+                intents_timeout=self.INTENTS_TIMEOUT_SECONDS,
+                wait_for_intents=wait_for_intents,
+            )

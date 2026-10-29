@@ -5,9 +5,53 @@ import secrets
 import structlog
 
 from domain.events import extract_session_id
-from domain.ports import LockSessionRepository, MessageQueue, PuryfiRegistry
+from domain.ports import (
+    LockSessionRepository,
+    MessageQueue,
+    PuryfiConnection,
+    PuryfiRegistry,
+)
+from domain.redaction import token_fingerprint
 
 log = structlog.get_logger(__name__)
+
+LockCommand = tuple[str, dict]
+
+
+async def _queue_and_flush(
+    *,
+    queue: MessageQueue,
+    puryfi: PuryfiRegistry,
+    link_token: str,
+    commands: list[LockCommand],
+    log_event: str,
+) -> tuple[PuryfiConnection | None, bool]:
+    """Persist lock commands, then try to deliver them to a ready plugin.
+
+    Commands always go through the durable queue: if PuryFi has not completed
+    its handshake or has not granted the required intents yet, they stay queued
+    and the bootstrap/``intentsGrant`` drain delivers them later. This makes a
+    lock webhook lossless even when it races the plugin connection setup.
+
+    Returns the live connection (if any) and whether the queue was fully
+    drained. ``(None, False)`` means there was no connection at all.
+    """
+    connection = puryfi.get(link_token)
+
+    for msg_type, payload in commands:
+        await queue.enqueue(link_token, msg_type, payload)
+
+    if connection is None:
+        return None, False
+
+    try:
+        return connection, await connection.flush_queue()
+    except Exception:
+        log.exception(
+            f"{log_event}.flush_failed",
+            link_token=token_fingerprint(link_token),
+        )
+        return connection, False
 
 
 async def handle_lock_frozen(
@@ -38,46 +82,42 @@ async def handle_lock_frozen(
         log.debug("webhook.lock_frozen.disabled", session_id=session_id)
         return {"status": "ok", "action": "lock_frozen_ignored_config_false"}
 
-    connection = puryfi.get(session.link_token)
-
     generated_password = secrets.token_urlsafe(16)
     await sessions.update(session_id, lock_password=generated_password)
     session.lock_password = generated_password
 
-    if connection:
-        log.info(
-            "webhook.lock_frozen.connection_found",
-            session_id=session_id,
-        )
-        # Send both state changes as one ordered mailbox batch: no other
-        # command can interleave between them.
-        await connection.send_messages(
-            [
-                ("setState", {"path": "enabled", "value": True}),
-                (
-                    "setState",
-                    {
-                        "path": "lockConfiguration",
-                        "value": {"password": {"secret": generated_password}},
-                    },
-                ),
-            ]
-        )
-        return {"status": "ok", "action": "lock_frozen_processed"}
+    connection, delivered = await _queue_and_flush(
+        queue=queue,
+        puryfi=puryfi,
+        link_token=session.link_token,
+        commands=[
+            ("setState", {"path": "enabled", "value": True}),
+            (
+                "setState",
+                {
+                    "path": "lockConfiguration",
+                    "value": {"password": {"secret": generated_password}},
+                },
+            ),
+        ],
+        log_event="webhook.lock_frozen",
+    )
 
-    log.info("webhook.lock_frozen.queued", session_id=session_id)
-    await queue.enqueue(
-        session.link_token, "setState", {"path": "enabled", "value": True}
-    )
-    await queue.enqueue(
-        session.link_token,
-        "setState",
-        {
-            "path": "lockConfiguration",
-            "value": {"password": {"secret": generated_password}},
-        },
-    )
-    return {"status": "ok", "action": "lock_frozen_queued_no_connection"}
+    if connection is None:
+        log.info("webhook.lock_frozen.queued", session_id=session_id)
+        return {"status": "ok", "action": "lock_frozen_queued_no_connection"}
+
+    if not delivered:
+        log.info(
+            "webhook.lock_frozen.queued_not_ready",
+            session_id=session_id,
+            ready=getattr(connection, "ready", False),
+            intents_granted=getattr(connection, "intents_granted", False),
+        )
+        return {"status": "ok", "action": "lock_frozen_queued_not_ready"}
+
+    log.info("webhook.lock_frozen.processed", session_id=session_id)
+    return {"status": "ok", "action": "lock_frozen_processed"}
 
 
 async def handle_lock_unfrozen(
@@ -108,7 +148,6 @@ async def handle_lock_unfrozen(
         log.debug("webhook.lock_unfrozen.disabled", session_id=session_id)
         return {"status": "ok", "action": "lock_unfrozen_ignored_config_false"}
 
-    connection = puryfi.get(session.link_token)
     retrieved_password = session.lock_password
 
     if not retrieved_password:
@@ -116,43 +155,32 @@ async def handle_lock_unfrozen(
         log.warning("webhook.lock_unfrozen.no_password", session_id=session_id)
         return {"status": "error", "error": "no_lock_password"}
 
-    if connection:
+    connection, delivered = await _queue_and_flush(
+        queue=queue,
+        puryfi=puryfi,
+        link_token=session.link_token,
+        commands=[
+            ("enterLockPassword", {"secret": retrieved_password}),
+            ("setState", {"path": "enabled", "value": False}),
+        ],
+        log_event="webhook.lock_unfrozen",
+    )
+
+    if connection is None:
+        log.info("webhook.lock_unfrozen.queued", session_id=session_id)
+        return {"status": "ok", "action": "lock_unfrozen_queued_no_connection"}
+
+    if not delivered:
         log.info(
-            "webhook.lock_unfrozen.connection_found",
+            "webhook.lock_unfrozen.queued_not_ready",
             session_id=session_id,
+            ready=getattr(connection, "ready", False),
+            intents_granted=getattr(connection, "intents_granted", False),
         )
-        unlock_response = await connection.send_message(
-            "enterLockPassword", {"secret": retrieved_password}
-        )
+        return {"status": "ok", "action": "lock_unfrozen_queued_not_ready"}
 
-        if isinstance(unlock_response, dict) and unlock_response.get("type") == "ok":
-            await connection.send_message(
-                "setState", {"path": "enabled", "value": False}
-            )
-        else:
-            error = (
-                unlock_response.get("error", "unknown_error")
-                if isinstance(unlock_response, dict)
-                else "unknown_error"
-            )
-            log.warning(
-                "webhook.lock_unfrozen.failed",
-                session_id=session_id,
-                error=error,
-            )
-            return {"status": "error", "error": error}
-
-        log.info("webhook.lock_unfrozen.processed", session_id=session_id)
-        return {"status": "ok", "action": "lock_unfrozen_processed"}
-
-    log.info("webhook.lock_unfrozen.queued", session_id=session_id)
-    await queue.enqueue(
-        session.link_token, "enterLockPassword", {"secret": retrieved_password}
-    )
-    await queue.enqueue(
-        session.link_token, "setState", {"path": "enabled", "value": False}
-    )
-    return {"status": "ok", "action": "lock_unfrozen_queued_no_connection"}
+    log.info("webhook.lock_unfrozen.processed", session_id=session_id)
+    return {"status": "ok", "action": "lock_unfrozen_processed"}
 
 
 async def handle_extension_updated(payload: dict) -> dict:

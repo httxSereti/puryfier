@@ -9,8 +9,13 @@ import asyncio
 import msgpack
 import pytest
 
+from domain.entities import (
+    ChasterExtensionConfigSchema,
+    LockSession,
+    QueuedCommand,
+)
 from models.connection import Connection
-from schemas import ChasterExtensionConfigSchema
+from realtime.protocol import intents as REQUIRED_INTENTS
 
 
 class FakeWebSocket:
@@ -19,6 +24,31 @@ class FakeWebSocket:
 
     async def send_bytes(self, data: bytes):
         self.sent.append(msgpack.unpackb(data))
+
+
+class FakeQueue:
+    def __init__(self, messages: list[QueuedCommand]):
+        self.messages = list(messages)
+        self.deleted: list[QueuedCommand] = []
+
+    async def fetch(self, _link_token: str) -> list[QueuedCommand]:
+        return list(self.messages)
+
+    async def delete(self, command: QueuedCommand) -> None:
+        self.deleted.append(command)
+        self.messages.remove(command)
+
+
+class FakeSessions:
+    async def get_by_link_token(self, link_token: str) -> LockSession:
+        return LockSession(
+            session_id="session-1",
+            config=ChasterExtensionConfigSchema(),
+            link_token=link_token,
+        )
+
+    async def mark_linked(self, _link_token: str) -> bool:
+        return False
 
 
 class FakeLockConfig:
@@ -201,6 +231,30 @@ class TestMailbox:
 
 
 class TestReadyGuard:
+    def test_ready_ack_is_sent_before_handshake_rpcs(self):
+        """PuryFi ignores plugin frames until it received the ready ack."""
+
+        async def scenario():
+            connection, ws = make_connection()
+
+            await connection.handle_message(
+                msgpack.packb({"type": "ready", "payload": {}, "responseId": 42})
+            )
+            await wait_until(
+                lambda: any(
+                    message.get("type") == "setPluginManifest"
+                    for message in ws.sent
+                )
+            )
+
+            assert ws.sent[0] == {
+                "payload": {"type": "ok"},
+                "responseId": 42,
+            }
+            await connection.stop()
+
+        run(scenario())
+
     def test_duplicate_ready_starts_one_handshake(self):
         async def scenario():
             connection, ws = make_connection()
@@ -260,6 +314,185 @@ class TestFailPending:
             with pytest.raises(ConnectionError):
                 await task
             assert connection.pending_requests == {}
+            await connection.stop()
+
+        run(scenario())
+
+
+def make_flush_connection(
+    messages: list[QueuedCommand] | None = None,
+) -> tuple[Connection, FakeWebSocket, FakeQueue]:
+    ws = FakeWebSocket()
+    queue = FakeQueue(messages or [])
+    connection = Connection(
+        ws,
+        FakeLockConfig(),
+        sessions=FakeSessions(),
+        queue=queue,
+    )
+    return connection, ws, queue
+
+
+async def answer_rpcs(connection: Connection, ws: FakeWebSocket, responses: list[dict]):
+    """Answer the next outgoing RPCs in order."""
+    for index, payload in enumerate(responses):
+        await wait_until(lambda index=index: len(ws.sent) > index)
+        await connection.handle_message(
+            msgpack.packb(
+                {
+                    "responseId": ws.sent[index]["responseId"],
+                    "payload": payload,
+                }
+            )
+        )
+
+
+class TestQueueFlushReadiness:
+    """Commands must never be sent before ready + intentsGrant (SDK review 3.1)."""
+
+    def test_flush_is_a_noop_before_ready(self):
+        async def scenario():
+            connection, ws, queue = make_flush_connection(
+                [QueuedCommand(id="1", link_token="tok", msg_type="setState", payload={})]
+            )
+
+            assert await connection.flush_queue() is False
+            assert ws.sent == []
+            assert len(queue.messages) == 1  # nothing lost
+            await connection.stop()
+
+        run(scenario())
+
+    def test_flush_is_a_noop_before_intents_grant(self):
+        async def scenario():
+            connection, ws, queue = make_flush_connection(
+                [QueuedCommand(id="1", link_token="tok", msg_type="setState", payload={})]
+            )
+            connection.ready = True
+
+            assert await connection.flush_queue() is False
+            assert ws.sent == []
+            assert len(queue.messages) == 1
+            await connection.stop()
+
+        run(scenario())
+
+    def test_flush_delivers_in_order_once_ready_and_granted(self):
+        async def scenario():
+            messages = [
+                QueuedCommand(
+                    id="1",
+                    link_token="tok",
+                    msg_type="enterLockPassword",
+                    payload={"secret": "s3cret"},
+                ),
+                QueuedCommand(
+                    id="2",
+                    link_token="tok",
+                    msg_type="setState",
+                    payload={"path": "enabled", "value": False},
+                ),
+            ]
+            connection, ws, queue = make_flush_connection(messages)
+            connection.ready = True
+            connection.intents_granted_event.set()
+
+            delivered, _ = await asyncio.gather(
+                connection.flush_queue(),
+                answer_rpcs(
+                    connection,
+                    ws,
+                    [{"type": "ok"}, {"type": "ok"}],
+                ),
+            )
+
+            assert delivered is True
+            assert [message["type"] for message in ws.sent] == [
+                "enterLockPassword",
+                "setState",
+            ]
+            assert queue.messages == []
+            assert len(queue.deleted) == 2
+            await connection.stop()
+
+        run(scenario())
+
+    def test_intents_grant_triggers_the_pending_queue_drain(self):
+        async def scenario():
+            connection, ws, queue = make_flush_connection(
+                [
+                    QueuedCommand(
+                        id="1",
+                        link_token="tok",
+                        msg_type="setState",
+                        payload={"path": "enabled", "value": True},
+                    )
+                ]
+            )
+            connection.ready = True
+
+            assert await connection.flush_queue() is False
+            assert queue.messages
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "intentsGrant",
+                        "payload": {"intents": REQUIRED_INTENTS},
+                    }
+                )
+            )
+
+            await asyncio.wait_for(answer_rpcs(connection, ws, [{"type": "ok"}]), 1)
+            for _ in range(100):
+                if not queue.messages:
+                    break
+                await asyncio.sleep(0.01)
+
+            assert queue.messages == []
+            assert [message["type"] for message in ws.sent] == ["setState"]
+            await connection.stop()
+
+        run(scenario())
+
+    def test_missing_intents_error_keeps_the_command_queued(self):
+        async def scenario():
+            connection, ws, queue = make_flush_connection(
+                [
+                    QueuedCommand(
+                        id="1",
+                        link_token="tok",
+                        msg_type="setState",
+                        payload={"path": "enabled", "value": True},
+                    )
+                ]
+            )
+            connection.ready = True
+            connection.intents_granted_event.set()
+
+            # The runtime uses `error`, not the SDK's `name`.
+            delivered, _ = await asyncio.gather(
+                connection.flush_queue(),
+                answer_rpcs(
+                    connection,
+                    ws,
+                    [
+                        {
+                            "type": "error",
+                            "error": "missingPluginIntents",
+                            "message": "intents required",
+                        },
+                        {"type": "ok"},
+                    ],
+                ),
+            )
+
+            assert delivered is False
+            assert queue.messages  # still queued for the next drain
+            assert [message["type"] for message in ws.sent] == [
+                "setState",
+                "requestPluginIntents",
+            ]
             await connection.stop()
 
         run(scenario())

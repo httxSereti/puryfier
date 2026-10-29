@@ -80,11 +80,28 @@ class ChasterGateway(Protocol):
 
 
 class PuryfiConnection(Protocol):
+    """The subset of a live Puryfi connection used by the domain use cases.
+
+    ``ready`` reflects the plugin handshake, while ``intents_granted`` reflects
+    the permission grant required before sending protected messages. Both must
+    be true before ``flush_queue`` can deliver anything.
+    """
+
+    @property
+    def ready(self) -> bool: ...
+
+    @property
+    def intents_granted(self) -> bool: ...
+
     async def send_message(self, msg_type: str, payload: dict) -> dict: ...
 
     async def send_messages(
         self, messages: list[tuple[str, dict]]
     ) -> list[dict]: ...
+
+    async def flush_queue(self) -> bool:
+        """Deliver durable commands if ready and granted; True when fully drained."""
+        ...
 
 
 class PuryfiRegistry(Protocol):
@@ -109,6 +126,9 @@ class OutboundConnection(Protocol):
     """The subset of a live Puryfi connection used by the outbound worker."""
 
     intents_granted_event: asyncio.Event
+
+    @property
+    def intents_granted(self) -> bool: ...
 
     async def send_message(self, msg_type: str, payload: dict) -> dict: ...
 

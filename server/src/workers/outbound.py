@@ -18,24 +18,32 @@ async def drain_queued_messages(
     sessions: LockSessionRepository,
     link_token: str,
     intents_timeout: float,
-) -> None:
+    wait_for_intents: bool = True,
+) -> bool:
     """Deliver durable commands in order, once intents were granted.
 
     Messages are deleted only after a successful send, so a crash mid-drain
     cannot lose them. Ordering is semantic for the lock/unlock protocol.
+
+    Returns True only when the queue was fully drained. On any failure the
+    undelivered messages stay queued for the next drain (reconnect,
+    ``intentsGrant``, or a later webhook flush).
     """
-    try:
-        await asyncio.wait_for(
-            connection.intents_granted_event.wait(),
-            timeout=intents_timeout,
-        )
-    except TimeoutError:
-        log.warning("connection.queue_intents_timeout")
-        return
+    if wait_for_intents:
+        try:
+            await asyncio.wait_for(
+                connection.intents_granted_event.wait(),
+                timeout=intents_timeout,
+            )
+        except TimeoutError:
+            log.warning("connection.queue_intents_timeout")
+            return False
+    elif not connection.intents_granted:
+        return False
 
     session = await link_puryfi(link_token, sessions=sessions)
     if session is None:
-        return
+        return False
 
     # The Puryfi handshake completed: tell the extension UI that the plugin is
     # now linked, without waiting for a page refresh.
@@ -49,10 +57,20 @@ async def drain_queued_messages(
             session_id=session.session_id,
             message_type=command.msg_type,
         )
-        res = await connection.send_message(command.msg_type, command.payload)
+        try:
+            res = await connection.send_message(command.msg_type, command.payload)
+        except (ConnectionError, TimeoutError):
+            log.warning(
+                "queue.send_exception",
+                session_id=session.session_id,
+                message_type=command.msg_type,
+            )
+            return False
 
         if isinstance(res, dict) and res.get("type") == "error":
-            error_name = res.get("name")
+            # The runtime uses `error`, the SDK types use `name`: accept both
+            # so a missing intents grant is always recovered.
+            error_name = res.get("error") or res.get("name")
             error_msg = res.get("message")
             log.warning(
                 "queue.send_failed",
@@ -62,14 +80,18 @@ async def drain_queued_messages(
                 error=error_msg,
             )
 
-            if error_name == "missingPluginIntents":
-                # Keep the message queued for the next drain and re-request intents.
-                await connection.send_message("requestPluginIntents", {"intents": intents})
-                return
-
-            # Other errors: stop draining and keep this and the remaining
-            # messages queued rather than dropping them out of order.
-            return
+            if error_name in {"missingPluginIntents", "missingIntents"}:
+                # Keep the message queued for the next drain and re-request
+                # intents. The `intentsGrant` handler triggers that drain.
+                try:
+                    await connection.send_message(
+                        "requestPluginIntents", {"intents": intents}
+                    )
+                except (ConnectionError, TimeoutError):
+                    pass
+            return False
 
         # Delivered: only now is it safe to remove it from the queue.
         await queue.delete(command)
+
+    return True

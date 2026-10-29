@@ -11,15 +11,23 @@ def run(coro):
 
 
 class FakeConnection:
-    """Records messages sent to the Puryfi client."""
+    """A live connection whose readiness and drain outcome are controlled."""
 
-    def __init__(self, responses: list[dict]):
-        self.sent: list[tuple[str, dict]] = []
-        self._responses = responses
+    def __init__(
+        self,
+        *,
+        ready: bool = True,
+        intents_granted: bool = True,
+        delivered: bool = True,
+    ):
+        self.ready = ready
+        self.intents_granted = intents_granted
+        self.delivered = delivered
+        self.flush_calls = 0
 
-    async def send_message(self, msg_type: str, payload: dict) -> dict:
-        self.sent.append((msg_type, payload))
-        return self._responses.pop(0)
+    async def flush_queue(self) -> bool:
+        self.flush_calls += 1
+        return self.delivered
 
 
 def make_payload(session_id: str = "session-1") -> dict:
@@ -31,6 +39,14 @@ def make_payload(session_id: str = "session-1") -> dict:
             "actionLog": {"type": "lock_unfrozen"},
         },
     }
+
+
+def queued_messages(mongo_db, link_token: str) -> list[dict]:
+    return list(
+        mongo_db["queued_messages"]
+        .find({"link_token": link_token})
+        .sort("_id", 1)
+    )
 
 
 class TestMissingKeys:
@@ -55,31 +71,13 @@ class TestNoPassword:
 
 
 class TestPluginResponses:
-    def test_error_response_without_type_key_is_handled(
-        self, client, seed_lock_configuration, monkeypatch
-    ):
-        """A plugin error payload lacking 'type' must not raise KeyError."""
-        seed_lock_configuration(
-            session_id="session-1", link_token="tok-err", lock_password="s3cret"
-        )
-        # Plugin answers with a payload that has neither 'type' nor 'error'.
-        fake = FakeConnection(responses=[{"unexpected": True}])
-        monkeypatch.setattr(
-            manager_module.manager, "get_by_user_link_token", lambda _t: fake
-        )
-
-        result = run(handle_lock_unfrozen(make_payload()))
-
-        assert result["status"] == "error"
-        assert result["error"] == "unknown_error"
-
-    def test_happy_path_unlocks_and_disables(
-        self, client, seed_lock_configuration, monkeypatch
+    def test_ready_connection_flushes_and_reports_processed(
+        self, client, seed_lock_configuration, mongo_db, monkeypatch
     ):
         seed_lock_configuration(
             session_id="session-1", link_token="tok-ok", lock_password="s3cret"
         )
-        fake = FakeConnection(responses=[{"type": "ok"}, {"type": "ok"}])
+        fake = FakeConnection(delivered=True)
         monkeypatch.setattr(
             manager_module.manager, "get_by_user_link_token", lambda _t: fake
         )
@@ -87,10 +85,54 @@ class TestPluginResponses:
         result = run(handle_lock_unfrozen(make_payload()))
 
         assert result["action"] == "lock_unfrozen_processed"
-        assert fake.sent == [
-            ("enterLockPassword", {"secret": "s3cret"}),
-            ("setState", {"path": "enabled", "value": False}),
+        assert fake.flush_calls == 1
+
+        # Commands are persisted before any delivery attempt: this is what
+        # makes the unlock lossless when PuryFi is not ready yet.
+        queued = queued_messages(mongo_db, "tok-ok")
+        assert [message["msg_type"] for message in queued] == [
+            "enterLockPassword",
+            "setState",
         ]
+        assert queued[0]["payload"] == {"secret": "s3cret"}
+        assert queued[1]["payload"] == {"path": "enabled", "value": False}
+
+    def test_not_ready_connection_keeps_commands_queued(
+        self, client, seed_lock_configuration, mongo_db, monkeypatch
+    ):
+        seed_lock_configuration(
+            session_id="session-1", link_token="tok-pending", lock_password="s3cret"
+        )
+        fake = FakeConnection(ready=False, intents_granted=False, delivered=False)
+        monkeypatch.setattr(
+            manager_module.manager, "get_by_user_link_token", lambda _t: fake
+        )
+
+        result = run(handle_lock_unfrozen(make_payload()))
+
+        # Never claim success when PuryFi did not apply the commands.
+        assert result == {
+            "status": "ok",
+            "action": "lock_unfrozen_queued_not_ready",
+        }
+        assert fake.flush_calls == 1
+        assert len(queued_messages(mongo_db, "tok-pending")) == 2
+
+    def test_flush_failure_does_not_report_processed(
+        self, client, seed_lock_configuration, mongo_db, monkeypatch
+    ):
+        seed_lock_configuration(
+            session_id="session-1", link_token="tok-fail", lock_password="s3cret"
+        )
+        fake = FakeConnection(delivered=False)
+        monkeypatch.setattr(
+            manager_module.manager, "get_by_user_link_token", lambda _t: fake
+        )
+
+        result = run(handle_lock_unfrozen(make_payload()))
+
+        assert result["action"] == "lock_unfrozen_queued_not_ready"
+        assert len(queued_messages(mongo_db, "tok-fail")) == 2
 
     def test_no_connection_queues_with_real_password(
         self, client, seed_lock_configuration, mongo_db
@@ -103,6 +145,6 @@ class TestPluginResponses:
         result = run(handle_lock_unfrozen(make_payload()))
 
         assert result["action"] == "lock_unfrozen_queued_no_connection"
-        queued = list(mongo_db["queued_messages"].find({"link_token": "tok-q"}))
+        queued = queued_messages(mongo_db, "tok-q")
         assert len(queued) == 2
         assert queued[0]["payload"] == {"secret": "s3cret"}

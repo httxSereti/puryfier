@@ -241,6 +241,98 @@ class TestQueueDrain:
         assert mongo_db["queued_messages"].count_documents({"link_token": "ws-tok-4"}) == 1
 
 
+class TestLockReadiness:
+    def test_lock_frozen_before_ready_is_queued_then_delivered(
+        self, client, seed_lock_configuration, mongo_db
+    ):
+        """SDK review 3.1: a lock webhook racing the handshake must not be lost."""
+        seed_lock_configuration(
+            link_token="ws-tok-ready", session_id="ws-session-ready"
+        )
+
+        with client.websocket_connect("/ws/ws-tok-ready") as puryfi:
+            # The socket is registered, but the plugin has not sent `ready`.
+            response = client.post(
+                WEBHOOK_URL,
+                json={
+                    "event": "action_log.created",
+                    "requestId": "req-lock-ready",
+                    "data": {
+                        "sessionId": "ws-session-ready",
+                        "actionLog": {
+                            "type": "lock_frozen",
+                            "_id": "action-lock-ready",
+                        },
+                    },
+                },
+                auth=WEBHOOK_AUTH,
+            )
+            assert response.status_code == 202
+
+            entry = wait_for_inbox(
+                mongo_db, "action_log.created:action-lock-ready"
+            )
+            assert entry["status"] == "done"
+            # Nothing was sent before readiness: both commands stay durable.
+            assert (
+                mongo_db["queued_messages"].count_documents(
+                    {"link_token": "ws-tok-ready"}
+                )
+                == 2
+            )
+
+            # The plugin now completes the handshake: the queued commands must
+            # be drained without requiring a reconnect.
+            puryfi.send_bytes(
+                msgpack.packb(
+                    {"type": "ready", "payload": {}, "responseId": 999}
+                )
+            )
+
+            set_state_payloads: list[dict] = []
+            for _ in range(100):
+                message = msgpack.unpackb(puryfi.receive_bytes())
+                if "type" not in message:
+                    continue  # response to our own messages
+
+                msg_type = message["type"]
+                if msg_type == "getPluginIntents":
+                    puryfi.send_bytes(
+                        rpc_response(
+                            message, {"type": "ok", "intents": INTENTS}
+                        )
+                    )
+                elif msg_type == "getState":
+                    puryfi.send_bytes(
+                        rpc_response(
+                            message, {"type": "ok", "value": "test-user"}
+                        )
+                    )
+                else:
+                    puryfi.send_bytes(rpc_response(message, {"type": "ok"}))
+
+                if msg_type == "setState":
+                    set_state_payloads.append(message["payload"])
+                if len(set_state_payloads) == 2:
+                    break
+
+            assert set_state_payloads[0] == {
+                "path": "enabled",
+                "value": True,
+            }
+            assert set_state_payloads[1]["path"] == "lockConfiguration"
+            assert set_state_payloads[1]["value"]["password"]["secret"]
+
+            for _ in range(100):
+                remaining = mongo_db["queued_messages"].count_documents(
+                    {"link_token": "ws-tok-ready"}
+                )
+                if remaining == 0:
+                    break
+                time.sleep(0.01)
+            assert remaining == 0
+
+
 class TestRealtimeStatus:
     """The extension UI follows the Puryfi link without reloading the page."""
 
