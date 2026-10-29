@@ -39,6 +39,7 @@ class PuryfiObjectLabel(IntEnum):
     Nipple = 23
     HandCovered = 24
     Hand = 25
+    Silhouette = 26
 
     @classmethod
     def get_name(cls, value: int) -> str | None:

@@ -33,7 +33,7 @@ Le SDK n’est pas une dépendance du serveur : `purify-sdk/` est un clone Git s
 | SDK local | `purify-sdk/`, commit `0252d1b` |
 | SDK npm | `@pury-fi/plugin-sdk@1.0.0` |
 | Runtime PuryFi de référence | 0.8.8.0 (`purify-sdk/versions-built/puryfi-firefox-0.8.8.0-an+fx.xpi`) |
-| Tests serveur | 185 tests passent (`pytest -q`) |
+| Tests serveur | 188 tests passent (`pytest -q`) |
 | Tests de contrat runtime | 11/11 passent (`pnpm test:runtime`) |
 
 ### Méthode de vérification
@@ -160,6 +160,18 @@ Tests associés : `server/tests/test_connection.py:301-399`, `server/tests/test_
 
 Tests associés : `server/tests/test_media_scan.py`.
 
+### 4.6 Enum des labels aligné sur le SDK
+
+**Avant :** `PuryfiObjectLabel` s’arrêtait à `Hand = 25`, alors que le SDK expose aussi `Silhouette = 26` (`purify-sdk/src/core/object.ts:28`).
+
+**Maintenant :**
+
+- `PuryfiObjectLabel.Silhouette = 26` est présent (`server/src/domain/entities.py:42`).
+- `PuryfiObjectLabel.get_name(26)` retourne `"Silhouette"` au lieu de `None`.
+- Le label reste absent de `CENSORABLE_LABELS` : il ne déclenche donc aucun compte de média censuré.
+
+Tests associés : `server/tests/test_entities.py`.
+
 ---
 
 ## 5. Vérification dynamique du runtime 0.8.8.0
@@ -204,29 +216,23 @@ Points confirmés sur PuryFi 0.8.8.0 :
 
 ## 6. Points résiduels
 
-### 6.1 `Silhouette` absent de l’enum local
-
-`server/src/domain/entities.py:15-41` ne contient pas `Silhouette = 26`, alors que le SDK l’expose (`purify-sdk/src/core/object.ts:28`).
-
-Impact faible aujourd’hui : ce label n’est pas dans `CENSORABLE_LABELS`, mais `PuryfiObjectLabel.get_name(26)` retournera `None` si un jour il est utilisé pour du logging ou de l’analytique.
-
-### 6.2 Version du manifest codée en dur
+### 6.1 Version du manifest codée en dur
 
 `server/src/realtime/protocol.py:7-13` contient `"version": "0.3.0"`. Il faut la synchroniser avec la version du projet lors des releases.
 
-### 6.3 Configuration du plugin non persistée entre reconnexions
+### 6.2 Configuration du plugin non persistée entre reconnexions
 
 `Connection.configuration` démarre à `{}` et est renvoyé dans `setPluginConfiguration` à chaque connexion (`connection.py:77`, `:492-495`). Puryfier n’expose aucun champ de configuration PuryFi aujourd’hui, donc c’est sans impact. Si des champs sont ajoutés plus tard, il faudra persister la configuration reçue via `configurationChange`.
 
-### 6.4 Ordre `enabled` → `lockConfiguration`
+### 6.3 Ordre `enabled` → `lockConfiguration`
 
 `lock_events.py:100-116` envoie `enabled=true` avant `lockConfiguration`. La queue garantit la livraison ordonnée et la reprise, mais si `lockConfiguration` échoue durablement, PuryFi peut rester activé sans nouveau lock. Ce n’est pas une non-conformité SDK ; c’est un risque produit à décider explicitement.
 
-### 6.5 Timeout d’accord des intents
+### 6.4 Timeout d’accord des intents
 
 `initialize_plugin()` attend au maximum 30 s l’accord manuel des intents (`connection.py:110`, `:531-534`). Au-delà, le handshake est abandonné et la socket fermée. À surveiller si l’UX PuryFi demande une validation humaine lente.
 
-### 6.6 Fonctionnalités SDK non implémentées
+### 6.5 Fonctionnalités SDK non implémentées
 
 Non utilisées, donc sans impact sur les fonctionnalités actuelles :
 
@@ -243,7 +249,7 @@ Non utilisées, donc sans impact sur les fonctionnalités actuelles :
 ### 7.1 Tests serveur
 
 ```text
-185 passed
+188 passed
 ```
 
 Les tests couvrent maintenant :
@@ -253,7 +259,8 @@ Les tests couvrent maintenant :
 - le payload complet de `lockConfiguration` ;
 - la mise en queue avant `ready` / avant `intentsGrant` ;
 - le traitement par lots des scans média ;
-- les variantes d’erreur et les timeouts de drain.
+- les variantes d’erreur et les timeouts de drain ;
+- l’alignement de `PuryfiObjectLabel` sur le SDK, dont `Silhouette = 26`.
 
 ### 7.2 Tests de contrat runtime
 
@@ -265,12 +272,11 @@ Limite : le harness dépend de `purify-sdk/versions-built/`, dossier ignoré par
 
 ## 8. Recommandations
 
-1. Ajouter `Silhouette = 26` à `PuryfiObjectLabel` pour rester aligné sur le SDK.
-2. Synchroniser la version du manifest avec la version du projet.
-3. Si des champs de configuration PuryFi sont ajoutés, persister `Connection.configuration` entre reconnexions.
-4. Décider explicitement de l’ordre `enabled` / `lockConfiguration` et du comportement en cas d’échec partiel.
-5. Revoir le timeout de 30 s pour l’accord manuel des intents.
-6. Exécuter `pnpm test:runtime` dans la CI lorsque le XPI de référence est disponible.
+1. Synchroniser la version du manifest avec la version du projet.
+2. Si des champs de configuration PuryFi sont ajoutés, persister `Connection.configuration` entre reconnexions.
+3. Décider explicitement de l’ordre `enabled` / `lockConfiguration` et du comportement en cas d’échec partiel.
+4. Revoir le timeout de 30 s pour l’accord manuel des intents.
+5. Exécuter `pnpm test:runtime` dans la CI lorsque le XPI de référence est disponible.
 
 ---
 
