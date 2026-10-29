@@ -1,19 +1,24 @@
-import type { ChasterExtensionConfigSchema } from "@/types/chaster";
+import type { components } from "@/types/api.generated";
 
-export interface ChasterExtensionSessionSchema {
-    id: string;
-    role: string;
+export type { components, operations, paths } from "@/types/api.generated";
 
-    has_linked_plugin: boolean;
-    is_online: boolean;
-    link_token: string | null;
-
-    config: ChasterExtensionConfigSchema | null;
-    lock_password: string | null;
-}
+/**
+ * Backend DTOs generated from the FastAPI OpenAPI document.
+ *
+ * Regenerate them with `pnpm generate:api` after changing a request or
+ * response model; never edit `api.generated.ts` by hand.
+ */
+export type CensorPicsConfigSchema = components["schemas"]["CensorPicsConfigSchema"];
+export type ChasterExtensionConfigSchema = components["schemas"]["ChasterExtensionConfigSchema"];
+export type ChasterExtensionConfigurationSchema =
+    components["schemas"]["ChasterExtensionConfigurationSchema"];
+export type ChasterExtensionSessionSchema = components["schemas"]["ChasterExtensionSessionSchema"];
 
 /**
  * Payload pushed by the backend's realtime status channel.
+ *
+ * WebSocket frames are not part of the HTTP OpenAPI document, so this frame
+ * stays hand-written. It mirrors the status payload sent by `api/realtime.py`.
  */
 export interface PuryfiRealtimeStatus {
     is_online: boolean;

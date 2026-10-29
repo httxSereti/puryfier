@@ -60,8 +60,33 @@ pnpm dev       # runs the frontend and backend together
 | `pnpm build` | Build the frontend for production |
 | `pnpm lint` | Lint the frontend |
 | `pnpm test` | Run the backend test suite |
+| `pnpm generate:api` | Export the FastAPI OpenAPI schema and regenerate the frontend DTO types |
+| `pnpm check:api` | Fail if `server/openapi.json` or `front/src/types/api.generated.ts` is out of date |
 
 To target a single workspace, use `pnpm --filter server dev` (or `front`).
+
+### API types
+
+Backend request and response types are the source of truth for the frontend:
+
+```text
+server/src/domain/entities.py
+        │ FastAPI
+        ▼
+server/openapi.json                       (committed contract)
+        │ openapi-typescript
+        ▼
+front/src/types/api.generated.ts          (generated, do not edit)
+        │ aliases
+        ▼
+front/src/types/api.ts
+```
+
+Run `pnpm generate:api` after changing a route, a request model or a response
+model, then commit `server/openapi.json` and `front/src/types/api.generated.ts`.
+`pnpm check:api` verifies both files are up to date, which makes it suitable for
+CI. The WebSocket status frame (`PuryfiRealtimeStatus`) stays hand-written in
+`front/src/types/api.ts` because it is not part of the HTTP OpenAPI document.
 
 `pnpm dev` serves the front on `http://localhost:5173` and proxies `/api` and `/ws`
 to the local backend on port 8000. The front therefore always uses same-origin URLs,

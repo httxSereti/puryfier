@@ -6,7 +6,7 @@ import NumberInput from "@/components/ui/number-input";
 import SectionCard from "@/components/ui/section-card";
 import StatusPill from "@/components/ui/status-pill";
 import { formatDuration, pluralize } from "@/lib/format";
-import type { ChasterExtensionConfigSchema } from "@/types/chaster";
+import type { ChasterExtensionConfigSchema } from "@/types/api";
 
 interface CensoredMediaOptionsProps {
     config: ChasterExtensionConfigSchema;

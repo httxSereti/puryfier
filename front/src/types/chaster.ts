@@ -45,24 +45,3 @@ export interface PartnerGetSessionAuthRepDto {
   userId: string;
   session: PartnerSession;
 }
-
-export interface ChasterExtensionConfigSchema {
-  lock_on_freeze: boolean;
-  unlock_on_unfreeze: boolean;
-
-  censorPicsConfig: {
-    enabled: boolean;
-    limit_count: number;
-    added_duration: number;
-  }
-}
-
-export interface ChasterExtensionConfigurationSchema {
-  id: string;
-  role: string;
-  has_linked_plugin: boolean;
-  is_online: boolean;
-  link_token: string | null;
-  has_session: boolean;
-  config: ChasterExtensionConfigSchema;
-}

@@ -67,3 +67,16 @@ The backend follows a layered layout (see `ARCHITECTURE_REVIEW.md`):
 Historical import paths (`models/`, `routes/`, `services/`, `schemas/`,
 `typings/`, `utils/`, `db.py`) are thin compatibility aliases for one release.
 New code must import from the layered paths above.
+
+## OpenAPI contract
+
+`scripts/export_openapi.py` writes the FastAPI schema to `openapi.json`, which
+the frontend consumes with `openapi-typescript`:
+
+```bash
+pnpm --filter server openapi        # regenerate server/openapi.json
+pnpm --filter server check:openapi  # fail if the committed schema is stale
+```
+
+Use the repository-level `pnpm generate:api` / `pnpm check:api` commands to
+handle the schema and the generated TypeScript file together.

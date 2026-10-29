@@ -3,7 +3,7 @@ import { SlidersHorizontal, Snowflake, Unlock } from "lucide-react";
 import ConfigurationSwitch from "@/components/common/configuration/ConfigurationSwitch";
 import SectionCard from "@/components/ui/section-card";
 import StatusPill from "@/components/ui/status-pill";
-import type { ChasterExtensionConfigSchema } from "@/types/chaster";
+import type { ChasterExtensionConfigSchema } from "@/types/api";
 
 interface GeneralConfigurationOptionsProps {
     config: ChasterExtensionConfigSchema;

@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import type {
     ChasterExtensionConfigSchema,
     ChasterExtensionConfigurationSchema,
-} from "@/types/chaster";
+} from "@/types/api";
 
 const CHASTER_ORIGIN = "https://chaster.app";
 

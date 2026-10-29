@@ -1,0 +1,433 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/webhooks/extensions/chaster": {
+      "post": {
+        "tags": [
+          "webhook"
+        ],
+        "summary": "Chaster Webhook",
+        "description": "Accept a Chaster webhook and store it in the durable inbox.\n\nProcessing (and any slow Puryfi RPC) happens in the background worker, so\nChaster's 10s timeout is never hit.",
+        "operationId": "chaster_webhook_api_webhooks_extensions_chaster_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ]
+      }
+    },
+    "/api/session/{main_token}": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Fetch Session",
+        "description": "Fetch a Chaster session and fetch-or-create its local configuration.",
+        "operationId": "fetch_session_api_session__main_token__get",
+        "parameters": [
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChasterExtensionSessionSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{main_token}/link-token": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Create Link Token Endpoint",
+        "description": "Generate (or reuse) the wearer's Puryfi link token.",
+        "operationId": "create_link_token_endpoint_api_session__main_token__link_token_post",
+        "parameters": [
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChasterExtensionSessionSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/{configuration_token}": {
+      "get": {
+        "tags": [
+          "configuration"
+        ],
+        "summary": "Configuration",
+        "description": "Get the configuration of the extension.",
+        "operationId": "configuration_api_configuration__configuration_token__get",
+        "parameters": [
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChasterExtensionConfigurationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "configuration"
+        ],
+        "summary": "Update Configuration",
+        "description": "Update the configuration of the extension.\n\nThe body is validated before Chaster is called, and the validated payload\nis the local source of truth even if Chaster omits ``config`` from its\nresponse.",
+        "operationId": "update_configuration_api_configuration__configuration_token__put",
+        "parameters": [
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChasterExtensionConfigSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CensorPicsConfigSchema": {
+        "properties": {
+          "limit_count": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Limit Count",
+            "default": 100
+          },
+          "added_duration": {
+            "type": "integer",
+            "maximum": 604800.0,
+            "minimum": 1.0,
+            "title": "Added Duration",
+            "default": 600
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CensorPicsConfigSchema"
+      },
+      "ChasterExtensionConfigSchema": {
+        "properties": {
+          "lock_on_freeze": {
+            "type": "boolean",
+            "title": "Lock On Freeze",
+            "default": false
+          },
+          "unlock_on_unfreeze": {
+            "type": "boolean",
+            "title": "Unlock On Unfreeze",
+            "default": false
+          },
+          "censorPicsConfig": {
+            "$ref": "#/components/schemas/CensorPicsConfigSchema"
+          }
+        },
+        "type": "object",
+        "title": "ChasterExtensionConfigSchema"
+      },
+      "ChasterExtensionConfigurationSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "is_online": {
+            "type": "boolean",
+            "title": "Is Online",
+            "default": false
+          },
+          "has_linked_plugin": {
+            "type": "boolean",
+            "title": "Has Linked Plugin",
+            "default": false
+          },
+          "link_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Token"
+          },
+          "has_session": {
+            "type": "boolean",
+            "title": "Has Session",
+            "default": false
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChasterExtensionConfigSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role"
+        ],
+        "title": "ChasterExtensionConfigurationSchema"
+      },
+      "ChasterExtensionSessionSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "is_online": {
+            "type": "boolean",
+            "title": "Is Online",
+            "default": false
+          },
+          "has_linked_plugin": {
+            "type": "boolean",
+            "title": "Has Linked Plugin",
+            "default": false
+          },
+          "link_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Token"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChasterExtensionConfigSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lock_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role"
+        ],
+        "title": "ChasterExtensionSessionSchema"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  }
+}
