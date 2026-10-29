@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from container import session_repository
+from container import get_active_container
 from domain.entities import ChasterExtensionConfigSchema, LockSession
 
 
@@ -14,4 +14,4 @@ async def get_or_create_lock_configuration(
 ) -> LockSession:
     if isinstance(config, dict):
         config = ChasterExtensionConfigSchema(**config)
-    return await session_repository.get_or_create(session_id, config=config, **fields)
+    return await get_active_container().session_repository.get_or_create(session_id, config=config, **fields)

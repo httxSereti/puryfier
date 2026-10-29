@@ -1,9 +1,8 @@
-import os
-
 from beanie import init_beanie
 from pymongo import AsyncMongoClient
 from pymongo.uri_parser import parse_uri
 
+from config import Settings, get_settings
 from infra.documents import QueuedMessage, UserLockConfiguration, WebhookInboxEntry
 from infra.logging import get_logger
 
@@ -14,27 +13,22 @@ _client: AsyncMongoClient | None = None
 DEFAULT_DB_NAME = "puryfi_chaster"
 
 
-def _resolve_db_name(url: str) -> str:
-    """Database name: explicit env var wins, otherwise parse the URI properly
+def _resolve_db_name(url: str, explicit: str | None) -> str:
+    """Database name: explicit setting wins, otherwise parse the URI properly
     (REVIEW.md #19 — no string hacking on the connection string)."""
-    explicit = os.getenv("DATABASE_NAME", "")
     if explicit:
         return explicit
     return parse_uri(url)["database"] or DEFAULT_DB_NAME
 
 
-async def init_db() -> None:
+async def init_db(settings: Settings | None = None) -> None:
     """Initialise the MongoDB connection and register all Beanie documents."""
     global _client
 
-    url = os.getenv(
-        "DATABASE_URL",
-        f"mongodb://puryfi:puryfi@localhost:27017/{DEFAULT_DB_NAME}?authSource=admin",
-    )
+    settings = settings or get_settings()
+    _client = AsyncMongoClient(settings.database_url)
 
-    _client = AsyncMongoClient(url)
-
-    db_name = _resolve_db_name(url)
+    db_name = _resolve_db_name(settings.database_url, settings.database_name)
     log.info("db.connecting", database=db_name)
 
     await init_beanie(

@@ -1,11 +1,6 @@
 """Deprecated service facade. Use :mod:`domain.use_cases.session_lifecycle`."""
 
-from container import (
-    message_queue,
-    puryfi_registry,
-    session_repository,
-    session_watchers,
-)
+from container import get_active_container
 from domain.use_cases.session_lifecycle import (
     SESSION_ENDED_CLOSE_CODE,
 )
@@ -17,10 +12,11 @@ __all__ = ["SESSION_ENDED_CLOSE_CODE", "revoke_session"]
 
 
 async def revoke_session(session_id: str) -> bool:
+    container = get_active_container()
     return await _revoke_session(
         session_id,
-        sessions=session_repository,
-        queue=message_queue,
-        puryfi=puryfi_registry,
-        watchers=session_watchers,
+        sessions=container.session_repository,
+        queue=container.message_queue,
+        puryfi=container.puryfi_registry,
+        watchers=container.session_watchers,
     )

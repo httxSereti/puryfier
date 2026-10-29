@@ -4,20 +4,16 @@ import asyncio
 
 import httpx
 from beanie.exceptions import CollectionWasNotInitialized
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pymongo.errors import PyMongoError
 
-from api.deps import (
-    get_chaster_gateway,
-    get_session_repository,
-)
+from container import Container
 from domain.entities import LockSession
-from domain.ports import ChasterGateway, LockSessionRepository
 from infra.logging import get_logger
 from infra.redaction import token_fingerprint
 from realtime.connection import Connection
-from realtime.registry import manager
-from realtime.watchers import watchers
+from realtime.registry import ConnectionManager
+from realtime.watchers import SessionWatcherManager
 
 log = get_logger(__name__)
 
@@ -28,10 +24,20 @@ router = APIRouter(prefix="/ws")
 WATCHER_HEARTBEAT_SECONDS = 30.0
 
 
+def _container_for(websocket: WebSocket) -> Container:
+    container = getattr(websocket.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("Application container is not initialised")
+    return container
+
+
 async def watch_session(
     websocket: WebSocket,
     session_id: str,
     lock_config: LockSession,
+    *,
+    registry: ConnectionManager,
+    watchers: SessionWatcherManager,
 ) -> None:
     """Stream the Puryfi connection status of a session to a browser socket."""
     await websocket.accept()
@@ -40,7 +46,7 @@ async def watch_session(
     try:
         # Always send the current state first: the page may have been opened
         # while Puryfi was already connected.
-        await websocket.send_json(manager.status_for_lock_config(lock_config))
+        await websocket.send_json(registry.status_for_lock_config(lock_config))
 
         while True:
             try:
@@ -64,12 +70,11 @@ async def watch_session(
 async def session_status_endpoint(
     websocket: WebSocket,
     main_token: str,
-    chaster: ChasterGateway = Depends(get_chaster_gateway),
-    sessions: LockSessionRepository = Depends(get_session_repository),
 ):
     """Realtime Puryfi status for the extension main page."""
+    container = _container_for(websocket)
     try:
-        data = await chaster.get_session_auth(main_token)
+        data = await container.chaster_gateway.get_session_auth(main_token)
     except HTTPException as e:
         log.warning(
             "ws.session.auth_rejected",
@@ -91,7 +96,7 @@ async def session_status_endpoint(
         return
 
     try:
-        lock_config = await sessions.get_by_session_id(data.session_id)
+        lock_config = await container.session_repository.get_by_session_id(data.session_id)
     except (CollectionWasNotInitialized, PyMongoError):
         log.exception(
             "ws.lock_config_failed",
@@ -104,19 +109,24 @@ async def session_status_endpoint(
         await websocket.close(code=4004)
         return
 
-    await watch_session(websocket, data.session_id, lock_config)
+    await watch_session(
+        websocket,
+        data.session_id,
+        lock_config,
+        registry=container.puryfi_registry,
+        watchers=container.session_watchers,
+    )
 
 
 @router.websocket("/configuration/{configuration_token}")
 async def configuration_status_endpoint(
     websocket: WebSocket,
     configuration_token: str,
-    chaster: ChasterGateway = Depends(get_chaster_gateway),
-    sessions: LockSessionRepository = Depends(get_session_repository),
 ):
     """Realtime Puryfi status for the extension configuration page."""
+    container = _container_for(websocket)
     try:
-        data = await chaster.get_configuration(configuration_token)
+        data = await container.chaster_gateway.get_configuration(configuration_token)
     except httpx.HTTPStatusError as e:
         log.warning(
             "ws.configuration.auth_rejected",
@@ -146,7 +156,7 @@ async def configuration_status_endpoint(
         return
 
     try:
-        lock_config = await sessions.get_by_session_id(data.session_id)
+        lock_config = await container.session_repository.get_by_session_id(data.session_id)
     except (CollectionWasNotInitialized, PyMongoError):
         log.exception(
             "ws.lock_config_failed",
@@ -159,19 +169,26 @@ async def configuration_status_endpoint(
         await websocket.close(code=4004)
         return
 
-    await watch_session(websocket, data.session_id, lock_config)
+    await watch_session(
+        websocket,
+        data.session_id,
+        lock_config,
+        registry=container.puryfi_registry,
+        watchers=container.session_watchers,
+    )
 
 
 @router.websocket("/{user_link_token}")
 async def websocket_endpoint(
     websocket: WebSocket,
     user_link_token: str,
-    sessions: LockSessionRepository = Depends(get_session_repository),
 ):
     """Handle WebSocket connections from the Puryfi plugin."""
+    container = _container_for(websocket)
+
     # Validate the token BEFORE accepting the connection.
     try:
-        user_lock_config = await sessions.get_by_link_token(user_link_token)
+        user_lock_config = await container.session_repository.get_by_link_token(user_link_token)
     except (CollectionWasNotInitialized, PyMongoError):
         log.exception(
             "ws.plugin.lock_config_failed",
@@ -190,11 +207,18 @@ async def websocket_endpoint(
 
     await websocket.accept()
 
-    # Connect the WebSocket actor.
-    connection = Connection(websocket, user_lock_config)
+    # Connect the WebSocket actor with this application's adapters.
+    connection = Connection(
+        websocket,
+        user_lock_config,
+        sessions=container.session_repository,
+        queue=container.message_queue,
+        media_scans=container.media_scans,
+    )
     await connection.start()
+    registry = container.puryfi_registry
     try:
-        await manager.add(connection, user_link_token)
+        await registry.add(connection, user_link_token)
 
         log.info(
             "ws.plugin.connected",
@@ -223,7 +247,7 @@ async def websocket_endpoint(
         # still published and the connection is unregistered.
         async def _cleanup() -> None:
             await connection.stop()
-            await manager.remove(user_link_token, connection)
+            await registry.remove(user_link_token, connection)
             log.info(
                 "ws.plugin.disconnected",
                 session_id=user_lock_config.session_id,

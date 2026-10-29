@@ -1,11 +1,11 @@
 import asyncio
-import os
 import random
 from typing import Any
 
 import httpx
 from fastapi import HTTPException
 
+from config import Settings
 from domain.entities import (
     ChasterConfiguration,
     ChasterExtensionConfigSchema,
@@ -22,22 +22,41 @@ CHASTER_RETRY_BASE_DELAY = 0.5
 CHASTER_RETRY_MAX_DELAY = 5.0
 CHASTER_RETRYABLE_STATUS_CODES = {408, 429}
 
-# One shared async client for all Chaster API calls (see REVIEW.md #4).
-# Always access it via the module (`chaster_api.chaster_client`) so tests can
-# swap it with a mock-transport client.
-chaster_client = httpx.AsyncClient(
-    base_url=CHASTER_BASE_URL,
-    headers={
-        "accept": "application/json",
-        "Authorization": f"Bearer {os.getenv('CHASTER_DEVELOPER_TOKEN', '')}",
-    },
-    timeout=10.0,
-)
+# Shared async client for all Chaster API calls (see REVIEW.md #4).
+# It is created at application startup from typed settings, never at import
+# time, so no token is captured when a module is merely imported. Always
+# access it via the module (`chaster_api.chaster_client`) so tests can swap it
+# with a mock-transport client.
+chaster_client: httpx.AsyncClient | None = None
+
+
+def configure_chaster_client(settings: Settings) -> httpx.AsyncClient:
+    """Build the process-wide Chaster client from validated settings."""
+    global chaster_client
+
+    chaster_client = httpx.AsyncClient(
+        base_url=CHASTER_BASE_URL,
+        headers={
+            "accept": "application/json",
+            "Authorization": f"Bearer {settings.chaster_developer_token.get_secret_value()}",
+        },
+        timeout=10.0,
+    )
+    return chaster_client
 
 
 async def close_chaster_client() -> None:
     """Close the shared client (called from the app lifespan shutdown)."""
-    await chaster_client.aclose()
+    global chaster_client
+
+    client = chaster_client
+    chaster_client = None
+    if client is None:
+        return
+
+    close = getattr(client, "aclose", None)
+    if close is not None:
+        await close()
 
 
 def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
@@ -61,8 +80,14 @@ async def request_chaster(method: str, path: str, **kwargs) -> httpx.Response:
     404, 422, ...) are returned immediately to the caller.
     """
     for attempt in range(1, CHASTER_MAX_ATTEMPTS + 1):
+        client = chaster_client
+        if client is None:
+            raise RuntimeError(
+                "Chaster client is not configured; call configure_chaster_client() first"
+            )
+
         try:
-            response = await chaster_client.request(method, path, **kwargs)
+            response = await client.request(method, path, **kwargs)
         except httpx.TransportError as exc:
             if attempt >= CHASTER_MAX_ATTEMPTS:
                 log.error(

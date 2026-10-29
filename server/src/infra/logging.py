@@ -18,7 +18,8 @@ from datetime import UTC, datetime
 
 import structlog
 
-DEFAULT_LOG_LEVEL = "INFO"
+from config import Settings
+
 _configured = False
 
 
@@ -45,16 +46,14 @@ def _make_timestamp(include_milliseconds: bool) -> structlog.types.Processor:
     return add_timestamp
 
 
-def _log_level() -> int:
-    value = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
+def _log_level(settings: Settings) -> int:
     levels = logging.getLevelNamesMapping()
-    return levels.get(value, logging.INFO)
+    return levels.get(settings.log_level.upper(), logging.INFO)
 
 
-def _use_json() -> bool:
-    value = os.getenv("LOG_FORMAT", "").strip().lower()
-    if value in {"json", "console"}:
-        return value == "json"
+def _use_json(settings: Settings) -> bool:
+    if settings.log_format is not None:
+        return settings.log_format == "json"
     return not sys.stdout.isatty()
 
 
@@ -84,16 +83,20 @@ def _shared_processors(
     ]
 
 
-def configure_logging() -> None:
+def configure_logging(settings: Settings | None = None, *, force: bool = False) -> None:
     """Configure structlog and route every stdlib logger through it.
 
-    Idempotent: uvicorn may import the app once, and tests may re-use it.
+    Settings are supplied by the application factory so log level and format
+    follow the same typed configuration as the rest of the process. The
+    function is idempotent unless ``force`` is set (used when a new app
+    instance replaces the module-level one in tests).
     """
     global _configured
-    if _configured:
+    if _configured and not force:
         return
 
-    use_json = _use_json()
+    settings = settings or Settings()
+    use_json = _use_json(settings)
     shared_processors = _shared_processors(
         include_milliseconds=use_json,
     )
@@ -122,7 +125,7 @@ def configure_logging() -> None:
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
-    root.setLevel(_log_level())
+    root.setLevel(_log_level(settings))
 
     # Uvicorn installs its own handlers when it starts. Drop them so its
     # records bubble up to the root handler and share the same format.

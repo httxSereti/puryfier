@@ -2,6 +2,23 @@
 
 Backend for Puryfi plugin to link Chaster & Puryfi
 
+## Configuration
+
+All environment access goes through `config.Settings` (pydantic-settings):
+
+- values are loaded once when `create_app()` runs and stored in
+  `app.state.settings`;
+- `Settings.validate_for_startup()` refuses to start when the webhook
+  credentials, the database URL or the Chaster developer token is missing;
+- secrets (Chaster token, webhook credentials) use `SecretStr`, so they never
+  appear in `repr()` or logs;
+- the dependency container is attached to `app.state.container` and injected
+  through `api.deps` (HTTP) or `websocket.app.state.container` (WebSocket).
+
+The `main:app` object is created by the module-level `app = create_app()` call
+used by uvicorn. Tests and embedded usages should call `create_app(settings)`
+to get isolated settings and adapters.
+
 ## Logging
 
 The server logs through [structlog](https://www.structlog.org/). Every log is
@@ -44,7 +61,8 @@ The backend follows a layered layout (see `ARCHITECTURE_REVIEW.md`):
 | `infra/`    | Chaster client, MongoDB documents/repositories, logging and redaction.|
 | `realtime/` | Puryfi protocol, connection actor, registry and browser watchers.     |
 | `workers/`  | Durable webhook inbox and outbound queue drain.                       |
-| `container.py` | Process-wide composition root used until DI moves to `app.state`.  |
+| `config.py` | Typed settings (`pydantic-settings`) and startup validation.          |
+| `container.py` | Composition root built by `create_app()` and bound to `app.state.container`. |
 
 Historical import paths (`models/`, `routes/`, `services/`, `schemas/`,
 `typings/`, `utils/`, `db.py`) are thin compatibility aliases for one release.

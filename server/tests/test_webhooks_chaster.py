@@ -92,8 +92,16 @@ class TestAuthentication:
         self, client, monkeypatch, user, password
     ):
         """Empty credentials must never authenticate (Basic Og== must be denied)."""
-        monkeypatch.setenv("CHASTER_WEBHOOK_USER", user)
-        monkeypatch.setenv("CHASTER_WEBHOOK_PWD", password)
+        from config import Settings
+
+        monkeypatch.setattr(
+            client.app.state,
+            "settings",
+            Settings(
+                chaster_webhook_user=user,
+                chaster_webhook_pwd=password,
+            ),
+        )
 
         response = client.post(
             WEBHOOK_URL, json=make_payload(), auth=(user, password)
@@ -105,6 +113,7 @@ class TestAuthentication:
         self, monkeypatch, mongo
     ):
         import db as db_module
+        from main import create_app
 
         monkeypatch.setattr(
             db_module, "AsyncMongoClient", lambda *args, **kwargs: mongo
@@ -113,7 +122,7 @@ class TestAuthentication:
         monkeypatch.setenv("CHASTER_WEBHOOK_USER", "")
         monkeypatch.setenv("CHASTER_WEBHOOK_PWD", "")
 
-        from main import app
+        app = create_app()
 
         with pytest.raises(RuntimeError, match="CHASTER_WEBHOOK_USER"), TestClient(app):
             pass

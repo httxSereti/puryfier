@@ -20,6 +20,7 @@ from memory_mongo import InMemoryMongoClient
 TEST_DB_NAME = "puryfi_chaster_test"
 TEST_WEBHOOK_USER = "test_webhook_user"
 TEST_WEBHOOK_PWD = "test_webhook_pwd"
+TEST_DEVELOPER_TOKEN = "test_developer_token"
 WEBHOOK_AUTH = (TEST_WEBHOOK_USER, TEST_WEBHOOK_PWD)
 
 
@@ -33,19 +34,20 @@ def mongo() -> InMemoryMongoClient:
 def client(mongo: InMemoryMongoClient, monkeypatch: pytest.MonkeyPatch):
     """TestClient on the real app, with Mongo swapped for the in-memory one.
 
-    Env vars are set before the app is imported so `load_dotenv()` cannot
-    override them with real values from .env (it does not override existing
-    variables). A fresh `mongo` per test gives full database isolation.
+    Env vars are set before the app is created so typed `Settings` picks them
+    up. A fresh `mongo` per test gives full database isolation.
     """
     import db as db_module
 
     monkeypatch.setattr(db_module, "AsyncMongoClient", lambda *args, **kwargs: mongo)
     monkeypatch.setenv("DATABASE_URL", f"mongodb://localhost:27017/{TEST_DB_NAME}")
+    monkeypatch.setenv("CHASTER_DEVELOPER_TOKEN", TEST_DEVELOPER_TOKEN)
     monkeypatch.setenv("CHASTER_WEBHOOK_USER", TEST_WEBHOOK_USER)
     monkeypatch.setenv("CHASTER_WEBHOOK_PWD", TEST_WEBHOOK_PWD)
 
-    from main import app
+    from main import create_app
 
+    app = create_app()
     # raise_server_exceptions=False: server errors surface as 500 responses
     # so tests can assert on them instead of raising.
     with TestClient(app, raise_server_exceptions=False) as test_client:

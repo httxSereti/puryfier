@@ -5,11 +5,11 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from api.deps import verify_credentials
+from api.deps import get_webhook_worker, verify_credentials
 from domain.errors import InvalidWebhookPayloadError
 from domain.events import build_event_key
 from infra.logging import get_logger
-from workers.webhook_inbox import webhook_worker
+from workers.webhook_inbox import WebhookInboxWorker
 
 log = get_logger(__name__)
 
@@ -17,7 +17,11 @@ router = APIRouter(prefix="/api/webhooks", tags=["webhook"])
 
 
 @router.post("/extensions/chaster", status_code=status.HTTP_202_ACCEPTED)
-async def chaster_webhook(request: Request, _: str = Depends(verify_credentials)):
+async def chaster_webhook(
+    request: Request,
+    _: str = Depends(verify_credentials),
+    worker: WebhookInboxWorker = Depends(get_webhook_worker),
+):
     """Accept a Chaster webhook and store it in the durable inbox.
 
     Processing (and any slow Puryfi RPC) happens in the background worker, so
@@ -76,7 +80,7 @@ async def chaster_webhook(request: Request, _: str = Depends(verify_credentials)
         # to process, so acknowledge it without writing an inbox entry.
         return {"status": "ok", "action": "ignored_no_event_key"}
 
-    accepted = await webhook_worker.enqueue(data, event_key)
+    accepted = await worker.enqueue(data, event_key)
     if not accepted:
         log.info("webhook.duplicate_ignored", event_key=event_key)
         return JSONResponse(
