@@ -455,7 +455,38 @@ class TestQueueFlushReadiness:
 
         run(scenario())
 
-    def test_missing_intents_error_keeps_the_command_queued(self):
+    @pytest.mark.parametrize(
+        "error_payload",
+        [
+            {
+                "type": "error",
+                "error": "missingPluginIntents",
+                "message": "intents required",
+            },
+            {
+                "type": "error",
+                "error": "missingIntents",
+                "message": "intents required",
+            },
+            {
+                "type": "error",
+                "name": "missingPluginIntents",
+                "message": "intents required",
+            },
+            {
+                "type": "error",
+                "name": "missingIntents",
+                "message": "intents required",
+            },
+        ],
+        ids=[
+            "runtime-missingPluginIntents",
+            "runtime-missingIntents",
+            "sdk-missingPluginIntents",
+            "sdk-missingIntents",
+        ],
+    )
+    def test_missing_intents_error_keeps_the_command_queued(self, error_payload):
         async def scenario():
             connection, ws, queue = make_flush_connection(
                 [
@@ -470,18 +501,13 @@ class TestQueueFlushReadiness:
             connection.ready = True
             connection.intents_granted_event.set()
 
-            # The runtime uses `error`, not the SDK's `name`.
             delivered, _ = await asyncio.gather(
                 connection.flush_queue(),
                 answer_rpcs(
                     connection,
                     ws,
                     [
-                        {
-                            "type": "error",
-                            "error": "missingPluginIntents",
-                            "message": "intents required",
-                        },
+                        error_payload,
                         {"type": "ok"},
                     ],
                 ),
@@ -493,6 +519,37 @@ class TestQueueFlushReadiness:
                 "setState",
                 "requestPluginIntents",
             ]
+            await connection.stop()
+
+        run(scenario())
+
+    def test_other_errors_keep_the_command_queued_without_re_requesting_intents(self):
+        async def scenario():
+            connection, ws, queue = make_flush_connection(
+                [
+                    QueuedCommand(
+                        id="1",
+                        link_token="tok",
+                        msg_type="setState",
+                        payload={"path": "enabled", "value": True},
+                    )
+                ]
+            )
+            connection.ready = True
+            connection.intents_granted_event.set()
+
+            delivered, _ = await asyncio.gather(
+                connection.flush_queue(),
+                answer_rpcs(
+                    connection,
+                    ws,
+                    [{"type": "error", "error": "invalidPath", "message": "nope"}],
+                ),
+            )
+
+            assert delivered is False
+            assert queue.messages
+            assert [message["type"] for message in ws.sent] == ["setState"]
             await connection.stop()
 
         run(scenario())

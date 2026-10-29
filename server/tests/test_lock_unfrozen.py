@@ -115,7 +115,8 @@ class TestPluginResponses:
             "status": "ok",
             "action": "lock_unfrozen_queued_not_ready",
         }
-        assert fake.flush_calls == 1
+        # Readiness is checked before attempting a drain.
+        assert fake.flush_calls == 0
         assert len(queued_messages(mongo_db, "tok-pending")) == 2
 
     def test_flush_failure_does_not_report_processed(

@@ -44,6 +44,13 @@ async def _queue_and_flush(
     if connection is None:
         return None, False
 
+    # Enforce readiness at the use-case boundary too: the durable queue is the
+    # only safe place for commands until PuryFi acknowledged `ready` and
+    # granted the required intents. The bootstrap or `intentsGrant` drain will
+    # deliver them later.
+    if not connection.ready or not connection.intents_granted:
+        return connection, False
+
     try:
         return connection, await connection.flush_queue()
     except Exception:
