@@ -16,7 +16,7 @@ MISSING_INTENTS_ERRORS = frozenset({"missingPluginIntents", "missingIntents"})
 def _error_name(response: dict) -> str | None:
     """Read a PuryFi error identifier from either protocol variant.
 
-    The PuryFi 0.8.7.1 runtime puts the identifier in ``error`` while the SDK
+    The PuryFi 0.8.8.0 runtime puts the identifier in ``error`` while the SDK
     types and docs use ``name``; accept both so a missing intents grant is
     always recovered instead of silently keeping the command queued.
     """
