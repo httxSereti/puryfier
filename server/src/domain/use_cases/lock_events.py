@@ -103,7 +103,15 @@ async def handle_lock_frozen(
                 "setState",
                 {
                     "path": "lockConfiguration",
-                    "value": {"password": {"secret": generated_password}},
+                    # WriteOnlyValue<"lockConfiguration"> has three required
+                    # fields. Send them explicitly: PuryFi replaces the whole
+                    # value, and omitting timer/timerPlus relies on implicit
+                    # null defaults instead of the SDK contract.
+                    "value": {
+                        "password": {"secret": generated_password},
+                        "timer": None,
+                        "timerPlus": None,
+                    },
                 },
             ),
         ],

@@ -320,8 +320,18 @@ class TestLockReadiness:
                 "path": "enabled",
                 "value": True,
             }
-            assert set_state_payloads[1]["path"] == "lockConfiguration"
-            assert set_state_payloads[1]["value"]["password"]["secret"]
+            # SDK review 3.3: the full WriteOnlyValue<"lockConfiguration">
+            # shape must reach the plugin, not just the password.
+            lock_configuration = set_state_payloads[1]
+            assert lock_configuration["path"] == "lockConfiguration"
+            assert set(lock_configuration["value"]) == {
+                "password",
+                "timer",
+                "timerPlus",
+            }
+            assert lock_configuration["value"]["password"]["secret"]
+            assert lock_configuration["value"]["timer"] is None
+            assert lock_configuration["value"]["timerPlus"] is None
 
             for _ in range(100):
                 remaining = mongo_db["queued_messages"].count_documents(

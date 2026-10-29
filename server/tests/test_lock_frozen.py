@@ -72,15 +72,20 @@ class TestReadinessGating:
             "setState",
         ]
         assert queued[0]["payload"] == {"path": "enabled", "value": True}
-        assert queued[1]["payload"]["path"] == "lockConfiguration"
 
         stored = mongo_db["users_lock_configurations"].find_one(
             {"session_id": "session-1"}
         )
-        assert (
-            queued[1]["payload"]["value"]["password"]["secret"]
-            == stored["lock_password"]
-        )
+        # SDK review 3.3: send the full WriteOnlyValue<"lockConfiguration">
+        # shape, including the explicit null timer fields.
+        assert queued[1]["payload"] == {
+            "path": "lockConfiguration",
+            "value": {
+                "password": {"secret": stored["lock_password"]},
+                "timer": None,
+                "timerPlus": None,
+            },
+        }
 
     def test_before_ready_keeps_commands_queued(
         self, client, seed_lock_configuration, mongo_db, monkeypatch
