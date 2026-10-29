@@ -30,3 +30,8 @@ dist-ssr
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# test output
+coverage
+playwright-report
+test-results

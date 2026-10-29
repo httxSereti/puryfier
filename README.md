@@ -59,7 +59,8 @@ pnpm dev       # runs the frontend and backend together
 | `pnpm dev` | Run the frontend dev server and the backend with reload |
 | `pnpm build` | Build the frontend for production |
 | `pnpm lint` | Lint the frontend |
-| `pnpm test` | Run the backend test suite |
+| `pnpm test` | Run the backend and frontend unit/component tests |
+| `pnpm test:e2e` | Run the Playwright end-to-end tests |
 | `pnpm generate:api` | Export the FastAPI OpenAPI schema and regenerate the frontend DTO types |
 | `pnpm check:api` | Fail if `server/openapi.json` or `front/src/types/api.generated.ts` is out of date |
 
@@ -92,6 +93,26 @@ CI. The WebSocket status frame (`PuryfiRealtimeStatus`) stays hand-written in
 to the local backend on port 8000. The front therefore always uses same-origin URLs,
 exactly like in production.
 
+### Frontend tests
+
+The frontend has two test layers:
+
+- **Vitest + Testing Library** for pure helpers, hooks, components and pages.
+  They run in jsdom with `pnpm --filter front test` (also included in `pnpm test`).
+  Network calls are mocked at the API-module boundary, so no backend is needed.
+- **Playwright** for end-to-end journeys in Chromium (`pnpm test:e2e`). Playwright
+  starts Vite on port 4173 and intercepts `/api` and `/ws` from the browser, which
+  keeps the suite independent from Chaster and MongoDB.
+
+Install the Playwright browser once before the first E2E run:
+
+```bash
+pnpm --filter front exec playwright install chromium
+```
+
+Playwright writes its report to `front/playwright-report/` and traces/screenshots to
+`front/test-results/`; both are ignored by Git.
+
 ### Dev with the Cloudflare Tunnel (watch)
 
 You do **not** need the whole Compose stack to expose the dev server. The tunnel runs
@@ -104,6 +125,13 @@ on its own and can route to the host:
 | `dev.example.com` | `/api` | `http://host.docker.internal:8000` |
 | `dev.example.com` | `/ws` | `http://host.docker.internal:8000` |
 | `dev.example.com` | — | `http://host.docker.internal:5173` |
+
+> The Cloudflare **Path** field matches by prefix: `/api` matches `/api/...`
+> only. Do not use a broader pattern such as `*api*`, otherwise Vite modules
+> whose path contains `/api/` would be sent to the backend and the page would
+> stay black. You can check it with
+> `curl -s https://dev.example.com/src/lib/http/session.ts | head`: the response
+> must be JavaScript, not `{"detail":"Not Found"}`.
 
 2. Start only MongoDB and the tunnel, then run the dev servers:
 

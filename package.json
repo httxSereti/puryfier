@@ -9,6 +9,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter front test:e2e",
+    "test:e2e:ui": "pnpm --filter front test:e2e:ui",
     "generate:api": "pnpm --filter server openapi && pnpm --filter front generate:api",
     "check:api": "pnpm --filter server check:openapi && pnpm --filter front check:api",
     "preview": "turbo run preview",

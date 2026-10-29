@@ -13,18 +13,20 @@ export async function copyText(text: string): Promise<boolean> {
         // Fall through to the legacy path.
     }
 
+    let textarea: HTMLTextAreaElement | null = null;
+
     try {
-        const textarea = document.createElement("textarea");
+        textarea = document.createElement("textarea");
         textarea.value = text;
         textarea.style.position = "fixed";
         textarea.style.opacity = "0";
         document.body.appendChild(textarea);
         textarea.focus();
         textarea.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        return ok;
+        return document.execCommand("copy");
     } catch {
         return false;
+    } finally {
+        textarea?.remove();
     }
 }

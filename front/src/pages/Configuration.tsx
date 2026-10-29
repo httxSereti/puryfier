@@ -10,7 +10,7 @@ import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
 import { useConfiguration } from "@/hooks/useConfiguration";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
-import { updateConfiguration } from "@/lib/api/configuration";
+import { updateConfiguration } from "@/lib/http/configuration";
 import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";

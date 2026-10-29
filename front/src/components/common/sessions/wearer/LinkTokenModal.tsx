@@ -3,7 +3,7 @@ import { Check, Copy, KeyRound, LoaderCircle, TriangleAlert, X } from "lucide-re
 
 import { copyText } from "@/lib/clipboard";
 import { getPuryfiWebSocketUrl } from "@/lib/backend";
-import { createLinkToken } from "@/lib/api/session";
+import { createLinkToken } from "@/lib/http/session";
 import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
