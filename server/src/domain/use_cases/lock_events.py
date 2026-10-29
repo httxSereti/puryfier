@@ -98,7 +98,6 @@ async def handle_lock_frozen(
         puryfi=puryfi,
         link_token=session.link_token,
         commands=[
-            ("setState", {"path": "enabled", "value": True}),
             (
                 "setState",
                 {
@@ -114,6 +113,12 @@ async def handle_lock_frozen(
                     },
                 },
             ),
+            # Configure the lock before enabling PuryFi: the durable queue
+            # stops at the first failed command, so a rejected
+            # `lockConfiguration` can never be followed by `enabled=true`.
+            # Retrying the sequence is safe because it converges to the same
+            # state.
+            ("setState", {"path": "enabled", "value": True}),
         ],
         log_event="webhook.lock_frozen",
     )

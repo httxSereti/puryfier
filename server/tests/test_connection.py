@@ -551,6 +551,62 @@ class TestQueueFlushReadiness:
 
         run(scenario())
 
+    def test_lock_configuration_error_never_enables_puryfi(self):
+        """SDK review 6.2: failed lockConfiguration must stop the sequence."""
+
+        async def scenario():
+            messages = [
+                QueuedCommand(
+                    id="1",
+                    link_token="tok",
+                    msg_type="setState",
+                    payload={
+                        "path": "lockConfiguration",
+                        "value": {
+                            "password": {"secret": "s3cret"},
+                            "timer": None,
+                            "timerPlus": None,
+                        },
+                    },
+                ),
+                QueuedCommand(
+                    id="2",
+                    link_token="tok",
+                    msg_type="setState",
+                    payload={"path": "enabled", "value": True},
+                ),
+            ]
+            connection, ws, queue = make_flush_connection(messages)
+            connection.ready = True
+            connection.intents_granted_event.set()
+
+            delivered, _ = await asyncio.gather(
+                connection.flush_queue(),
+                answer_rpcs(
+                    connection,
+                    ws,
+                    [
+                        {
+                            "type": "error",
+                            "error": "invalidMessage",
+                            "message": "bad lock configuration",
+                        }
+                    ],
+                ),
+            )
+
+            assert delivered is False
+            assert [message["payload"]["path"] for message in ws.sent] == [
+                "lockConfiguration"
+            ]
+            # Nothing was acknowledged: both commands stay queued in order and
+            # can be replayed on the next drain.
+            assert [command.id for command in queue.messages] == ["1", "2"]
+            assert queue.deleted == []
+            await connection.stop()
+
+        run(scenario())
+
     def test_intents_grant_triggers_the_pending_queue_drain(self):
         async def scenario():
             connection, ws, queue = make_flush_connection(

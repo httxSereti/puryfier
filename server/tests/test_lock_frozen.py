@@ -71,14 +71,15 @@ class TestReadinessGating:
             "setState",
             "setState",
         ]
-        assert queued[0]["payload"] == {"path": "enabled", "value": True}
 
         stored = mongo_db["users_lock_configurations"].find_one(
             {"session_id": "session-1"}
         )
         # SDK review 3.3: send the full WriteOnlyValue<"lockConfiguration">
         # shape, including the explicit null timer fields.
-        assert queued[1]["payload"] == {
+        # SDK review 6.2: configure the lock before enabling PuryFi, so a
+        # failed lockConfiguration cannot leave it enabled without a lock.
+        assert queued[0]["payload"] == {
             "path": "lockConfiguration",
             "value": {
                 "password": {"secret": stored["lock_password"]},
@@ -86,6 +87,7 @@ class TestReadinessGating:
                 "timerPlus": None,
             },
         }
+        assert queued[1]["payload"] == {"path": "enabled", "value": True}
 
     def test_before_ready_keeps_commands_queued(
         self, client, seed_lock_configuration, mongo_db, monkeypatch

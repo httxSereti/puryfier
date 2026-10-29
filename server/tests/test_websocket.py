@@ -356,13 +356,10 @@ class TestLockReadiness:
                 if len(set_state_payloads) == 2:
                     break
 
-            assert set_state_payloads[0] == {
-                "path": "enabled",
-                "value": True,
-            }
+            # SDK review 6.2: the lock is configured before PuryFi is enabled.
             # SDK review 3.3: the full WriteOnlyValue<"lockConfiguration">
             # shape must reach the plugin, not just the password.
-            lock_configuration = set_state_payloads[1]
+            lock_configuration = set_state_payloads[0]
             assert lock_configuration["path"] == "lockConfiguration"
             assert set(lock_configuration["value"]) == {
                 "password",
@@ -372,6 +369,10 @@ class TestLockReadiness:
             assert lock_configuration["value"]["password"]["secret"]
             assert lock_configuration["value"]["timer"] is None
             assert lock_configuration["value"]["timerPlus"] is None
+            assert set_state_payloads[1] == {
+                "path": "enabled",
+                "value": True,
+            }
 
             for _ in range(100):
                 remaining = mongo_db["queued_messages"].count_documents(
