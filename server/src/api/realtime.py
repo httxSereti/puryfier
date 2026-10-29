@@ -213,7 +213,7 @@ async def websocket_endpoint(
         user_lock_config,
         sessions=container.session_repository,
         queue=container.message_queue,
-        media_scans=container.media_scans,
+        media_scans=container.media_scan_batcher,
     )
     await connection.start()
     registry = container.puryfi_registry

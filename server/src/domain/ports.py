@@ -5,6 +5,7 @@ Beanie, msgpack or a concrete database client.
 """
 
 import asyncio
+from collections.abc import Sequence
 from typing import Any, Protocol
 
 from domain.entities import (
@@ -36,6 +37,19 @@ class LockSessionRepository(Protocol):
     async def mark_linked(self, link_token: str) -> bool: ...
 
     async def increment_censored_count(self, session_id: str) -> int | None: ...
+
+    async def increment_censored_count_by(
+        self, session_id: str, count: int
+    ) -> int | None: ...
+
+    async def claim_censored_penalties(
+        self,
+        session_id: str,
+        limit: int,
+        max_penalties: int,
+    ) -> int: ...
+
+    async def restore_censored_count(self, session_id: str, count: int) -> None: ...
 
     async def reset_censored_count(self, session_id: str) -> None: ...
 
@@ -77,6 +91,16 @@ class ChasterGateway(Protocol):
         icon: str = "link",
         color: str = "#ffffff",
     ) -> bool: ...
+
+
+class MediaScanSink(Protocol):
+    """Non-blocking entry point for high-volume ``staticMediaScan`` events."""
+
+    def record_nowait(
+        self,
+        session: LockSession,
+        objects: Sequence[Any],
+    ) -> None: ...
 
 
 class PuryfiConnection(Protocol):

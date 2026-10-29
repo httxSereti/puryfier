@@ -23,6 +23,7 @@ from infra.queue import MongoMessageQueue
 from infra.repositories import MongoLockSessionRepository
 from realtime.registry import ConnectionManager, manager
 from realtime.watchers import SessionWatcherManager, watchers
+from workers.media_scans import MediaScanBatcher
 from workers.webhook_inbox import WebhookInboxWorker, webhook_worker
 
 
@@ -37,6 +38,7 @@ class Container:
     puryfi_registry: ConnectionManager
     session_watchers: SessionWatcherManager
     media_scans: MediaScanService
+    media_scan_batcher: MediaScanBatcher
     webhook_worker: WebhookInboxWorker
 
 
@@ -55,6 +57,10 @@ def build_container(settings: Settings | None = None) -> Container:
     chaster_gateway = ChasterService()
     session_repository = MongoLockSessionRepository()
     message_queue = MongoMessageQueue()
+    media_scans = MediaScanService(
+        sessions=session_repository,
+        chaster=chaster_gateway,
+    )
 
     return Container(
         settings=settings,
@@ -63,10 +69,8 @@ def build_container(settings: Settings | None = None) -> Container:
         message_queue=message_queue,
         puryfi_registry=manager,
         session_watchers=watchers,
-        media_scans=MediaScanService(
-            sessions=session_repository,
-            chaster=chaster_gateway,
-        ),
+        media_scans=media_scans,
+        media_scan_batcher=MediaScanBatcher(scans=media_scans),
         webhook_worker=webhook_worker,
     )
 

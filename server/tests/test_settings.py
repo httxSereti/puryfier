@@ -71,6 +71,7 @@ class TestAppStateDependencies:
         assert container.session_repository is not None
         assert container.message_queue is not None
         assert container.puryfi_registry is not None
+        assert container.media_scan_batcher is not None
         assert container.webhook_worker is not None
 
     def test_create_app_keeps_instances_isolated(self, client):

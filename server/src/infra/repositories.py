@@ -109,16 +109,64 @@ class MongoLockSessionRepository:
         return result.modified_count > 0
 
     async def increment_censored_count(self, session_id: str) -> int | None:
-        document = await self._collection.find_one_and_update(
-            {"session_id": session_id},
-            {"$inc": {"seen_censored_objects": 1}},
-            return_document=ReturnDocument.AFTER,
-        )
+        return await self.increment_censored_count_by(session_id, 1)
+
+    async def increment_censored_count_by(
+        self, session_id: str, count: int
+    ) -> int | None:
+        """Atomically add ``count`` censored images and return the new total."""
+        if count < 0:
+            raise ValueError("count must be non-negative")
+
+        if count == 0:
+            document = await self._collection.find_one({"session_id": session_id})
+        else:
+            document = await self._collection.find_one_and_update(
+                {"session_id": session_id},
+                {"$inc": {"seen_censored_objects": count}},
+                return_document=ReturnDocument.AFTER,
+            )
+
         if isinstance(document, dict) and isinstance(
             document.get("seen_censored_objects"), int
         ):
             return document["seen_censored_objects"]
         return None
+
+    async def claim_censored_penalties(
+        self,
+        session_id: str,
+        limit: int,
+        max_penalties: int,
+    ) -> int:
+        """Atomically claim whole thresholds and return the claimed image count.
+
+        Claiming decrements the persisted counter by ``limit * k``. If another
+        flush already claimed the same block, nothing is returned and no
+        penalty may be applied.
+        """
+        if limit <= 0 or max_penalties <= 0:
+            return 0
+
+        claimed = limit * max_penalties
+        document = await self._collection.find_one_and_update(
+            {
+                "session_id": session_id,
+                "seen_censored_objects": {"$gte": claimed},
+            },
+            {"$inc": {"seen_censored_objects": -claimed}},
+            return_document=ReturnDocument.AFTER,
+        )
+        return claimed if document is not None else 0
+
+    async def restore_censored_count(self, session_id: str, count: int) -> None:
+        """Give back a claimed block after the Chaster call failed."""
+        if count <= 0:
+            return
+        await self._collection.update_one(
+            {"session_id": session_id},
+            {"$inc": {"seen_censored_objects": count}},
+        )
 
     async def reset_censored_count(self, session_id: str) -> None:
         await self._collection.update_one(

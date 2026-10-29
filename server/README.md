@@ -60,7 +60,7 @@ The backend follows a layered layout (see `ARCHITECTURE_REVIEW.md`):
 | `domain/`   | Entities, events, ports and use cases. No FastAPI/Beanie/msgpack.     |
 | `infra/`    | Chaster client, MongoDB documents/repositories, logging and redaction.|
 | `realtime/` | Puryfi protocol, connection actor, registry and browser watchers.     |
-| `workers/`  | Durable webhook inbox and outbound queue drain.                       |
+| `workers/`  | Durable webhook inbox, outbound queue drain and media-scan batching.  |
 | `config.py` | Typed settings (`pydantic-settings`) and startup validation.          |
 | `container.py` | Composition root built by `create_app()` and bound to `app.state.container`. |
 

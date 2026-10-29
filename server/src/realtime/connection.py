@@ -8,9 +8,7 @@ from dataclasses import dataclass
 from fastapi import WebSocket
 
 from domain.entities import ChasterExtensionConfigSchema, LockSession
-from domain.ports import LockSessionRepository, MessageQueue
-from domain.use_cases.media_scan import CENSORABLE_LABELS, MediaScanService
-from infra.chaster import ChasterService, add_time_to_lock, create_custom_log
+from domain.ports import LockSessionRepository, MediaScanSink, MessageQueue
 from infra.logging import get_logger
 from infra.queue import MongoMessageQueue
 from infra.repositories import MongoLockSessionRepository
@@ -38,10 +36,7 @@ def _parse_api_version(value: object) -> tuple[int, int, int] | None:
 
 
 __all__ = [
-    "CENSORABLE_LABELS",
     "Connection",
-    "add_time_to_lock",
-    "create_custom_log",
     "intents",
     "manifest",
 ]
@@ -72,7 +67,7 @@ class Connection:
         *,
         sessions: LockSessionRepository | None = None,
         queue: MessageQueue | None = None,
-        media_scans: MediaScanService | None = None,
+        media_scans: MediaScanSink | None = None,
     ):
         self.websocket = websocket
         self.session: LockSession = user_lock_config
@@ -94,10 +89,9 @@ class Connection:
 
         self._sessions = sessions or MongoLockSessionRepository()
         self._queue = queue or MongoMessageQueue()
-        self._media_scans = media_scans or MediaScanService(
-            sessions=self._sessions,
-            chaster=ChasterService(),
-        )
+        # A process-wide batcher is injected by the composition root. Direct
+        # unit tests that do not care about media scans may omit it.
+        self._media_scans = media_scans
         self._status_publisher: StatusPublisher | None = None
 
         # One ordered mailbox per connection: every outbound command is queued
@@ -378,13 +372,20 @@ class Connection:
                     )
 
         elif msg_type == "staticMediaScan":
-            objects = payload.get("objects", [])
-            await self._media_scans.record(
-                self.session,
-                objects,
-                add_time=add_time_to_lock,
-                create_log=create_custom_log,
-            )
+            # Never do I/O here: PuryFi can emit dozens of scans per second and
+            # this read loop also receives the responses of pending RPCs. The
+            # batcher only increments an in-memory counter.
+            if self._media_scans is not None:
+                try:
+                    self._media_scans.record_nowait(
+                        self.session,
+                        payload.get("objects", []),
+                    )
+                except Exception:
+                    log.exception(
+                        "connection.media_scan_enqueue_failed",
+                        session_id=getattr(self.session, "session_id", None),
+                    )
 
         if response_id is not None and response is not None:
             await self.send_response(response_id, response)

@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     configure_chaster_client(settings)
     await init_db(settings)
     set_active_container(container)
+    await container.media_scan_batcher.start()
     await container.webhook_worker.start()
 
     log.info(
@@ -43,6 +44,9 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # Flush pending media counters before the database and Chaster clients
+        # are closed.
+        await container.media_scan_batcher.stop()
         await container.webhook_worker.stop()
         await close_db()
         await close_chaster_client()
