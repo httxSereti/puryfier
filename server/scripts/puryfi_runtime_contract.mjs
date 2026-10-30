@@ -341,6 +341,8 @@ async function main() {
       "writeLockConfigurationState",
       "readUserState",
       "readMediaProcesses",
+      "readEnabledState",
+      "readLockConfigurationState",
     ],
     pendingIntents: [],
     configuration: null,
@@ -366,6 +368,160 @@ async function main() {
     assert(
       response.value === "contract-user",
       `unexpected value: ${response.value}`,
+    );
+  });
+
+  await test("getState user.supportTier retourne le profil", async () => {
+    handler.state = makeState();
+    const response = await handler.handleMessage("contract-plugin", {
+      type: "getState",
+      payload: { path: "user.supportTier" },
+    });
+    assert(response.type === "ok", "response must be ok");
+    assert(
+      response.value?.name === "No tier" && response.value?.level === null,
+      `unexpected support tier: ${JSON.stringify(response.value)}`,
+    );
+  });
+
+  await test("getState user retourne le profil complet", async () => {
+    handler.state = makeState();
+    const response = await handler.handleMessage("contract-plugin", {
+      type: "getState",
+      payload: { path: "user" },
+    });
+    assert(response.type === "ok", "response must be ok");
+    assert(
+      response.value?.username === "contract-user",
+      `unexpected username: ${response.value?.username}`,
+    );
+    assert(
+      response.value?.supportTier?.name === "No tier",
+      `unexpected support tier: ${JSON.stringify(response.value?.supportTier)}`,
+    );
+  });
+
+  await test("getState user reste lisible quand le compte charge", async () => {
+    handler.state = makeState({ user: null });
+    const response = await handler.handleMessage("contract-plugin", {
+      type: "getState",
+      payload: { path: "user" },
+    });
+    assert(response.type === "ok", "root user path must not fail");
+    assert(response.value === null, "unloaded account must be null");
+
+    const leaf = await handler.handleMessage("contract-plugin", {
+      type: "getState",
+      payload: { path: "user.username" },
+    });
+    assert(
+      leaf.type === "error" && leaf.error === "unavailablePath",
+      "leaf user paths are unavailable while the account is null",
+    );
+  });
+
+  await test("subscribeToState user exige readUserState", async () => {
+    handler.state = makeState();
+    handler.connections = [
+      {
+        plugin,
+        data: {
+          type: "open",
+          isReady: true,
+          isSubscribedToStaticMediaScans: false,
+          subscribedToState: new Set(),
+        },
+      },
+    ];
+    const originalIntents = plugin.intents;
+    plugin.intents = [];
+    try {
+      const denied = await handler.handleMessage("contract-plugin", {
+        type: "subscribeToState",
+        payload: { path: "user" },
+      });
+      assert(
+        denied.type === "error" && denied.error === "missingPluginIntents",
+        "subscription must be denied without readUserState",
+      );
+    } finally {
+      plugin.intents = originalIntents;
+    }
+
+    const allowed = await handler.handleMessage("contract-plugin", {
+      type: "subscribeToState",
+      payload: { path: "user" },
+    });
+    assert(allowed.type === "ok", "subscription must be accepted");
+    assert(
+      handler.connections[0].data.subscribedToState.has("user"),
+      "user path must be subscribed",
+    );
+  });
+
+  await test("getState enabled retourne l'état PuryFi", async () => {
+    handler.state = makeState({ enabled: true });
+    const response = await handler.handleMessage("contract-plugin", {
+      type: "getState",
+      payload: { path: "enabled" },
+    });
+    assert(response.type === "ok", "response must be ok");
+    assert(response.value === true, `unexpected enabled: ${response.value}`);
+  });
+
+  await test("getState lockConfiguration redige le secret", async () => {
+    handler.state = makeState({ lockConfiguration: makeLockState() });
+    const response = await handler.handleMessage("contract-plugin", {
+      type: "getState",
+      payload: { path: "lockConfiguration" },
+    });
+    assert(response.type === "ok", "response must be ok");
+    assert(
+      response.value?.startTime === 1000,
+      `unexpected lock state: ${JSON.stringify(response.value)}`,
+    );
+    assert(
+      !("secret" in (response.value?.password ?? {})),
+      "the lock password secret must never be readable",
+    );
+  });
+
+  await test("subscribeToState enabled exige readEnabledState", async () => {
+    handler.state = makeState();
+    handler.connections = [
+      {
+        plugin,
+        data: {
+          type: "open",
+          isReady: true,
+          isSubscribedToStaticMediaScans: false,
+          subscribedToState: new Set(),
+        },
+      },
+    ];
+    const originalIntents = plugin.intents;
+    plugin.intents = ["readUserState"];
+    try {
+      const denied = await handler.handleMessage("contract-plugin", {
+        type: "subscribeToState",
+        payload: { path: "enabled" },
+      });
+      assert(
+        denied.type === "error" && denied.error === "missingPluginIntents",
+        "state subscription must be denied without readEnabledState",
+      );
+    } finally {
+      plugin.intents = originalIntents;
+    }
+
+    const allowed = await handler.handleMessage("contract-plugin", {
+      type: "subscribeToState",
+      payload: { path: "enabled" },
+    });
+    assert(allowed.type === "ok", "subscription must be accepted");
+    assert(
+      handler.connections[0].data.subscribedToState.has("enabled"),
+      "enabled path must be subscribed",
     );
   });
 

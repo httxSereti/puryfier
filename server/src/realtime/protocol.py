@@ -15,10 +15,17 @@ manifest = {
 }
 
 intents = [
-    "readUserState",  # read username
+    "readUserState",  # read the PuryFi user profile (username, support tier)
     "writeLockConfigurationState",  # lock puryfi
     "writeEnabledState",  # enable/disable puryfi
     "readMediaProcesses",  # read media processes
+]
+
+# Requested as optional permissions so the session can display PuryFi's live
+# enabled/lock state without making the core handshake depend on them.
+optional_intents = [
+    "readEnabledState",
+    "readLockConfigurationState",
 ]
 
 

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Session from "@/pages/Session";
+import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
 import { fetchSession } from "@/lib/http/session";
 import { clearLocationHash, makeSession, setChasterHash } from "@/test/fixtures";
 
@@ -16,10 +17,13 @@ vi.mock("@/hooks/usePuryfiRealtimeStatus", () => ({
 }));
 
 const fetchSessionMock = vi.mocked(fetchSession);
+const realtimeStatusMock = vi.mocked(usePuryfiRealtimeStatus);
 
 beforeEach(() => {
     clearLocationHash();
     fetchSessionMock.mockReset();
+    realtimeStatusMock.mockReset();
+    realtimeStatusMock.mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -49,6 +53,8 @@ describe("Session page", () => {
                 is_online: true,
                 has_linked_plugin: true,
                 puryfi_version: "0.8.7.1",
+                puryfi_username: "alice",
+                puryfi_support_tier: { level: 2, name: "Supporter" },
                 lock_password: "emergency-secret",
             }),
         );
@@ -58,12 +64,40 @@ describe("Session page", () => {
 
         expect(await screen.findByText("Puryfi connected")).toBeInTheDocument();
         expect(screen.getByText("v0.8.7.1")).toBeInTheDocument();
+        expect(screen.getAllByText(/alice/).length).toBeGreaterThan(0);
+        expect(screen.getByText("Supporter")).toBeInTheDocument();
         expect(screen.getByText("Emergency password")).toBeInTheDocument();
         expect(screen.queryByText("emergency-secret")).not.toBeInTheDocument();
 
         await user.click(screen.getByRole("button", { name: "Reveal password" }));
 
         expect(screen.getByText("emergency-secret")).toBeInTheDocument();
+    });
+
+    it("shows the live PuryFi enabled and lock state", async () => {
+        setChasterHash({ mainToken: "main-token" });
+        fetchSessionMock.mockResolvedValue(
+            makeSession({
+                is_online: true,
+                has_linked_plugin: true,
+                puryfi_version: "0.8.8.0",
+            }),
+        );
+        realtimeStatusMock.mockReturnValue({
+            is_online: true,
+            has_linked_plugin: true,
+            puryfi_version: "0.8.8.0",
+            puryfi_username: "alice",
+            puryfi_support_tier: { level: 2, name: "Supporter" },
+            puryfi_enabled: true,
+            puryfi_has_lock: true,
+        });
+
+        render(<Session />);
+
+        expect(await screen.findByText("Puryfi connected")).toBeInTheDocument();
+        expect(screen.getByText("Enabled")).toBeInTheDocument();
+        expect(screen.getByText("Lock set")).toBeInTheDocument();
     });
 
     it("shows the offline state for a linked plugin", async () => {

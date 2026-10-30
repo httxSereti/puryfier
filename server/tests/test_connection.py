@@ -12,10 +12,12 @@ import pytest
 from domain.entities import (
     ChasterExtensionConfigSchema,
     LockSession,
+    PuryfiSupportTierSchema,
     QueuedCommand,
 )
 from models.connection import Connection
 from realtime.protocol import intents as REQUIRED_INTENTS
+from realtime.protocol import optional_intents as OPTIONAL_INTENTS
 
 READY_PAYLOAD = {
     "version": "0.8.7.1",
@@ -27,9 +29,13 @@ READY_PAYLOAD = {
 class FakeWebSocket:
     def __init__(self):
         self.sent: list[dict] = []
+        self.close_codes: list[int] = []
 
     async def send_bytes(self, data: bytes):
         self.sent.append(msgpack.unpackb(data))
+
+    async def close(self, code: int = 1000):
+        self.close_codes.append(code)
 
 
 class FakeQueue:
@@ -46,6 +52,9 @@ class FakeQueue:
 
 
 class FakeSessions:
+    def __init__(self) -> None:
+        self.updates: list[tuple[str, dict]] = []
+
     async def get_by_link_token(self, link_token: str) -> LockSession:
         return LockSession(
             session_id="session-1",
@@ -55,6 +64,10 @@ class FakeSessions:
 
     async def mark_linked(self, _link_token: str) -> bool:
         return False
+
+    async def update(self, session_id: str, **fields) -> bool:
+        self.updates.append((session_id, fields))
+        return True
 
 
 class FakeLockConfig:
@@ -432,6 +445,135 @@ class TestReadyGuard:
         run(scenario())
 
 
+class TestPendingIntents:
+    """An intents approval can take longer than the handshake itself."""
+
+    @staticmethod
+    async def _finish_handshake_without_intents(
+        connection: Connection, ws: FakeWebSocket
+    ) -> None:
+        await connection.handle_message(
+            msgpack.packb(
+                {"type": "ready", "payload": READY_PAYLOAD, "responseId": 1}
+            )
+        )
+
+        index = 0
+        idle = 0
+        while idle < 20:
+            if index >= len(ws.sent):
+                idle += 1
+                await asyncio.sleep(0)
+                continue
+
+            idle = 0
+            message = ws.sent[index]
+            index += 1
+            msg_type = message.get("type")
+            if msg_type is None:
+                continue  # response to the plugin's `ready` message
+
+            if msg_type == "getPluginIntents":
+                payload = {"type": "ok", "intents": []}
+            else:
+                payload = {"type": "ok"}
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "responseId": message["responseId"],
+                        "payload": payload,
+                    }
+                )
+            )
+
+    def test_pending_intents_do_not_close_the_connection(self):
+        async def scenario():
+            connection, ws, _ = make_flush_connection()
+
+            await self._finish_handshake_without_intents(connection, ws)
+            await asyncio.sleep(0.05)
+
+            assert connection.ready
+            assert not connection.intents_granted
+            assert ws.close_codes == []
+            message_types = [message.get("type") for message in ws.sent]
+            # Intent-gated RPCs must wait for the grant instead of failing the
+            # handshake or being rejected by PuryFi.
+            assert "getState" not in message_types
+            assert "subscribeToState" not in message_types
+            assert "subscribeToStaticMediaScans" not in message_types
+
+            await connection.stop()
+
+        run(scenario())
+
+    def test_late_intents_grant_finishes_setup_and_drains_the_queue(self):
+        async def scenario():
+            connection, ws, queue = make_flush_connection(
+                [
+                    QueuedCommand(
+                        id="1",
+                        link_token="tok",
+                        msg_type="setState",
+                        payload={"path": "enabled", "value": True},
+                    )
+                ]
+            )
+
+            await self._finish_handshake_without_intents(connection, ws)
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "intentsGrant",
+                        "payload": {"intents": REQUIRED_INTENTS},
+                    }
+                )
+            )
+
+            index = len(ws.sent)
+            for expected_type in (
+                "subscribeToState",
+                "getState",
+                "subscribeToStaticMediaScans",
+                "setState",
+            ):
+                await wait_until(lambda index=index: len(ws.sent) > index)
+                message = ws.sent[index]
+                index += 1
+                assert message["type"] == expected_type
+
+                if expected_type == "getState":
+                    payload = {
+                        "type": "ok",
+                        "value": {
+                            "username": "alice",
+                            "supportTier": {"level": 2, "name": "Supporter"},
+                        },
+                    }
+                else:
+                    payload = {"type": "ok"}
+
+                await connection.handle_message(
+                    msgpack.packb(
+                        {
+                            "responseId": message["responseId"],
+                            "payload": payload,
+                        }
+                    )
+                )
+
+            await wait_until(lambda: queue.messages == [])
+
+            assert connection.intents_granted
+            assert connection._intents_setup_done
+            assert ws.close_codes == []
+            await connection.stop()
+
+        run(scenario())
+
+
 class TestFailPending:
     def test_outstanding_futures_fail_on_connection_close(self):
         async def scenario():
@@ -448,6 +590,359 @@ class TestFailPending:
             with pytest.raises(ConnectionError):
                 await task
             assert connection.pending_requests == {}
+            await connection.stop()
+
+        run(scenario())
+
+
+class TestPuryfiProfile:
+    """The profile is diagnostic metadata: never block the handshake on it."""
+
+    @staticmethod
+    def _connection(sessions: FakeSessions) -> tuple[Connection, FakeWebSocket]:
+        ws = FakeWebSocket()
+        connection = Connection(
+            ws,
+            LockSession(
+                session_id="session-1",
+                config=ChasterExtensionConfigSchema(),
+                link_token="tok",
+            ),
+            sessions=sessions,
+        )
+        connection.ready = True
+        return connection, ws
+
+    @staticmethod
+    async def _answer_handshake(
+        connection: Connection,
+        ws: FakeWebSocket,
+        *,
+        user_response: dict,
+        username_response: dict,
+        support_tier_response: dict,
+        puryfi_intents: list[str] | None = None,
+        enabled_response: dict | None = None,
+        lock_response: dict | None = None,
+    ) -> list[dict]:
+        """Answer the init RPCs until the scan subscription completes."""
+        messages: list[dict] = []
+        index = 0
+        intents_response = (
+            REQUIRED_INTENTS if puryfi_intents is None else puryfi_intents
+        )
+
+        while True:
+            await wait_until(lambda index=index: len(ws.sent) > index)
+            message = ws.sent[index]
+            messages.append(message)
+            msg_type = message["type"]
+            path = message["payload"].get("path")
+
+            if msg_type == "getPluginIntents":
+                payload = {"type": "ok", "intents": intents_response}
+            elif msg_type == "getState" and path == "user":
+                payload = user_response
+            elif msg_type == "getState" and path == "user.username":
+                payload = username_response
+            elif msg_type == "getState" and path == "user.supportTier":
+                payload = support_tier_response
+            elif msg_type == "getState" and path == "enabled":
+                payload = enabled_response or {"type": "ok", "value": None}
+            elif msg_type == "getState" and path == "lockConfiguration":
+                payload = lock_response or {"type": "ok", "value": None}
+            else:
+                payload = {"type": "ok"}
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "responseId": message["responseId"],
+                        "payload": payload,
+                    }
+                )
+            )
+            index += 1
+
+            if msg_type == "subscribeToStaticMediaScans":
+                return messages
+
+    def test_initialize_plugin_persists_username_and_support_tier(self):
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+
+            initialized, messages = await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    user_response={
+                        "type": "ok",
+                        "value": {
+                            "username": "alice",
+                            "supportTier": {"level": 2, "name": "Supporter"},
+                        },
+                    },
+                    username_response={"type": "ok", "value": "alice"},
+                    support_tier_response={
+                        "type": "ok",
+                        "value": {"level": 2, "name": "Supporter"},
+                    },
+                ),
+            )
+
+            assert initialized is True
+            assert connection.username == "alice"
+            assert connection.session.puryfi_username == "alice"
+            assert connection.session.puryfi_support_tier == (
+                PuryfiSupportTierSchema(level=2, name="Supporter")
+            )
+            assert ("subscribeToState", {"path": "user"}) in [
+                (message["type"], message["payload"]) for message in messages
+            ]
+            assert sessions.updates == [
+                (
+                    "session-1",
+                    {
+                        "puryfi_username": "alice",
+                        "puryfi_support_tier": PuryfiSupportTierSchema(
+                            level=2, name="Supporter"
+                        ),
+                    },
+                )
+            ]
+            await connection.stop()
+
+        run(scenario())
+
+    def test_initialize_plugin_reads_optional_puryfi_state(self):
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+            optional = [*REQUIRED_INTENTS, *OPTIONAL_INTENTS]
+
+            initialized, _ = await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    puryfi_intents=optional,
+                    user_response={
+                        "type": "ok",
+                        "value": {
+                            "username": "alice",
+                            "supportTier": {"level": 2, "name": "Supporter"},
+                        },
+                    },
+                    username_response={"type": "ok", "value": "alice"},
+                    support_tier_response={"type": "ok", "value": {}},
+                    enabled_response={"type": "ok", "value": True},
+                    lock_response={
+                        "type": "ok",
+                        "value": {"startTime": 1000},
+                    },
+                ),
+            )
+
+            assert initialized is True
+            assert connection.puryfi_enabled is True
+            assert connection.puryfi_has_lock is True
+            await connection.stop()
+
+        run(scenario())
+
+    def test_state_change_updates_the_optional_puryfi_state(self):
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+            optional = [*REQUIRED_INTENTS, *OPTIONAL_INTENTS]
+
+            await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    puryfi_intents=optional,
+                    user_response={"type": "ok", "value": None},
+                    username_response={"type": "error"},
+                    support_tier_response={"type": "error"},
+                    enabled_response={"type": "ok", "value": True},
+                    lock_response={
+                        "type": "ok",
+                        "value": {"startTime": 1000},
+                    },
+                ),
+            )
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {"path": "enabled", "value": False},
+                    }
+                )
+            )
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {
+                            "path": "lockConfiguration",
+                            "value": None,
+                        },
+                    }
+                )
+            )
+            await wait_until(
+                lambda: connection.puryfi_enabled is False
+                and connection.puryfi_has_lock is False
+            )
+
+            await connection.stop()
+
+        run(scenario())
+
+    def test_profile_error_does_not_fail_the_handshake(self):
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+
+            initialized, _ = await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    user_response={
+                        "type": "error",
+                        "error": "unavailablePath",
+                        "message": "user is null",
+                    },
+                    username_response={"type": "ok", "value": "alice"},
+                    support_tier_response={
+                        "type": "error",
+                        "message": "unknown path",
+                    },
+                ),
+            )
+
+            assert initialized is True
+            assert connection.session.puryfi_username == "alice"
+            assert connection.session.puryfi_support_tier is None
+            assert sessions.updates == [
+                ("session-1", {"puryfi_username": "alice"})
+            ]
+            await connection.stop()
+
+        run(scenario())
+
+    def test_late_user_load_is_captured_after_a_null_handshake(self):
+        """PuryFi can expose `user` as null while the account is loading."""
+
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+
+            initialized, _ = await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    user_response={"type": "ok", "value": None},
+                    username_response={
+                        "type": "error",
+                        "error": "unavailablePath",
+                    },
+                    support_tier_response={
+                        "type": "error",
+                        "error": "unavailablePath",
+                    },
+                ),
+            )
+
+            assert initialized is True
+            assert connection.session.puryfi_username is None
+            assert sessions.updates == []
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {
+                            "path": "user",
+                            "value": {
+                                "username": "alice",
+                                "supportTier": {"level": 2, "name": "Supporter"},
+                            },
+                        },
+                    }
+                )
+            )
+            await wait_until(lambda: bool(sessions.updates))
+
+            assert connection.session.puryfi_username == "alice"
+            assert connection.session.puryfi_support_tier == (
+                PuryfiSupportTierSchema(level=2, name="Supporter")
+            )
+            await connection.stop()
+
+        run(scenario())
+
+    def test_user_state_change_refreshes_the_profile(self):
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+
+            await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    user_response={
+                        "type": "ok",
+                        "value": {
+                            "username": "alice",
+                            "supportTier": {"level": 2, "name": "Supporter"},
+                        },
+                    },
+                    username_response={"type": "ok", "value": "alice"},
+                    support_tier_response={"type": "ok", "value": {}},
+                ),
+            )
+            sessions.updates.clear()
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {
+                            "path": "user",
+                            "value": {
+                                "username": "bob",
+                                "supportTier": {"level": 3, "name": "Gold"},
+                            },
+                        },
+                    }
+                )
+            )
+            await wait_until(lambda: bool(sessions.updates))
+
+            assert connection.username == "bob"
+            assert connection.session.puryfi_username == "bob"
+            assert connection.session.puryfi_support_tier == (
+                PuryfiSupportTierSchema(level=3, name="Gold")
+            )
+            assert sessions.updates == [
+                (
+                    "session-1",
+                    {
+                        "puryfi_username": "bob",
+                        "puryfi_support_tier": PuryfiSupportTierSchema(
+                            level=3, name="Gold"
+                        ),
+                    },
+                )
+            ]
             await connection.stop()
 
         run(scenario())
@@ -620,6 +1115,8 @@ class TestQueueFlushReadiness:
                 ]
             )
             connection.ready = True
+            connection._handshake_completed = True
+            connection._intents_setup_done = True
 
             assert await connection.flush_queue() is False
             assert queue.messages

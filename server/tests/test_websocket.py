@@ -32,6 +32,24 @@ READY_PAYLOAD = {
     "instanceId": "test-instance",
 }
 
+PROFILE_USERNAME = "test-user"
+PROFILE_SUPPORT_TIER = {"level": 3, "name": "Supporter"}
+
+
+def state_response(message: dict) -> dict:
+    path = message["payload"].get("path")
+    if path == "user":
+        return {
+            "type": "ok",
+            "value": {
+                "username": PROFILE_USERNAME,
+                "supportTier": PROFILE_SUPPORT_TIER,
+            },
+        }
+    if path == "user.supportTier":
+        return {"type": "ok", "value": PROFILE_SUPPORT_TIER}
+    return {"type": "ok", "value": PROFILE_USERNAME}
+
 
 @pytest.fixture(autouse=True)
 def clean_manager():
@@ -61,7 +79,13 @@ def send_ready(puryfi, payload: dict | None = None) -> None:
     )
 
 
-def answer_handshake(puryfi) -> None:
+def answer_handshake(
+    puryfi,
+    *,
+    granted_intents: list[str] | None = None,
+    puryfi_enabled: bool = True,
+    has_lock: bool = True,
+) -> None:
     """Answer the server's init RPCs so the plugin becomes fully ready."""
     for _ in range(50):
         message = msgpack.unpackb(puryfi.receive_bytes())
@@ -69,14 +93,33 @@ def answer_handshake(puryfi) -> None:
             continue  # response to the `ready` message itself
 
         msg_type = message["type"]
+        path = message["payload"].get("path")
         if msg_type == "getPluginIntents":
             puryfi.send_bytes(
-                rpc_response(message, {"type": "ok", "intents": INTENTS})
+                rpc_response(
+                    message,
+                    {
+                        "type": "ok",
+                        "intents": granted_intents or INTENTS,
+                    },
+                )
+            )
+        elif msg_type == "getState" and path == "enabled":
+            puryfi.send_bytes(
+                rpc_response(message, {"type": "ok", "value": puryfi_enabled})
+            )
+        elif msg_type == "getState" and path == "lockConfiguration":
+            puryfi.send_bytes(
+                rpc_response(
+                    message,
+                    {
+                        "type": "ok",
+                        "value": {"startTime": 1000} if has_lock else None,
+                    },
+                )
             )
         elif msg_type == "getState":
-            puryfi.send_bytes(
-                rpc_response(message, {"type": "ok", "value": "test-user"})
-            )
+            puryfi.send_bytes(rpc_response(message, state_response(message)))
         else:
             puryfi.send_bytes(rpc_response(message, {"type": "ok"}))
 
@@ -225,7 +268,7 @@ class TestQueueDrain:
                 if msg_type == "getPluginIntents":
                     ws.send_bytes(rpc_response(msg, {"type": "ok", "intents": INTENTS}))
                 elif msg_type == "getState":
-                    ws.send_bytes(rpc_response(msg, {"type": "ok", "value": "test-user"}))
+                    ws.send_bytes(rpc_response(msg, state_response(msg)))
                 else:
                     ws.send_bytes(rpc_response(msg, {"type": "ok"}))
 
@@ -266,7 +309,7 @@ class TestQueueDrain:
                 if msg["type"] == "getPluginIntents":
                     ws.send_bytes(rpc_response(msg, {"type": "ok", "intents": INTENTS}))
                 elif msg["type"] == "getState":
-                    ws.send_bytes(rpc_response(msg, {"type": "ok", "value": "test-user"}))
+                    ws.send_bytes(rpc_response(msg, state_response(msg)))
                 elif msg["type"] == "setState":
                     # Simulate a plugin-side failure that is NOT intents-related.
                     ws.send_bytes(rpc_response(
@@ -344,9 +387,7 @@ class TestLockReadiness:
                     )
                 elif msg_type == "getState":
                     puryfi.send_bytes(
-                        rpc_response(
-                            message, {"type": "ok", "value": "test-user"}
-                        )
+                        rpc_response(message, state_response(message))
                     )
                 else:
                     puryfi.send_bytes(rpc_response(message, {"type": "ok"}))
@@ -403,6 +444,8 @@ class TestRealtimeStatus:
                 "is_online": False,
                 "has_linked_plugin": True,
                 "puryfi_version": None,
+                "puryfi_username": None,
+                "puryfi_support_tier": None,
             }
 
             with client.websocket_connect("/ws/rt-token") as puryfi:
@@ -412,6 +455,8 @@ class TestRealtimeStatus:
                     "is_online": True,
                     "has_linked_plugin": True,
                     "puryfi_version": "0.8.7.1",
+                    "puryfi_username": None,
+                    "puryfi_support_tier": None,
                 }
 
                 # Close explicitly so the server cleanup is not canceled by
@@ -422,6 +467,8 @@ class TestRealtimeStatus:
                     "is_online": False,
                     "has_linked_plugin": True,
                     "puryfi_version": None,
+                    "puryfi_username": None,
+                    "puryfi_support_tier": None,
                 }
 
     def test_watcher_gets_current_status_when_puryfi_is_already_online(
@@ -446,10 +493,12 @@ class TestRealtimeStatus:
                     "is_online": True,
                     "has_linked_plugin": True,
                     "puryfi_version": "0.8.7.1",
+                    "puryfi_username": None,
+                    "puryfi_support_tier": None,
                 }
 
     def test_plugin_handshake_marks_plugin_as_linked(
-        self, client, seed_lock_configuration, monkeypatch
+        self, client, seed_lock_configuration, mongo_db, monkeypatch
     ):
         seed_lock_configuration(
             session_id="realtime-session",
@@ -468,6 +517,8 @@ class TestRealtimeStatus:
                 "is_online": False,
                 "has_linked_plugin": False,
                 "puryfi_version": None,
+                "puryfi_username": None,
+                "puryfi_support_tier": None,
             }
 
             with client.websocket_connect("/ws/rt-token") as puryfi:
@@ -477,6 +528,8 @@ class TestRealtimeStatus:
                     "is_online": True,
                     "has_linked_plugin": False,
                     "puryfi_version": "0.8.7.1",
+                    "puryfi_username": None,
+                    "puryfi_support_tier": None,
                 }
 
                 answer_handshake(puryfi)
@@ -485,7 +538,15 @@ class TestRealtimeStatus:
                     "is_online": True,
                     "has_linked_plugin": True,
                     "puryfi_version": "0.8.7.1",
+                    "puryfi_username": PROFILE_USERNAME,
+                    "puryfi_support_tier": PROFILE_SUPPORT_TIER,
                 }
+
+                stored = mongo_db["users_lock_configurations"].find_one(
+                    {"session_id": "realtime-session"}
+                )
+                assert stored["puryfi_username"] == PROFILE_USERNAME
+                assert stored["puryfi_support_tier"] == PROFILE_SUPPORT_TIER
 
                 puryfi.close()
                 assert watcher.receive_json() == {
@@ -493,7 +554,52 @@ class TestRealtimeStatus:
                     "is_online": False,
                     "has_linked_plugin": True,
                     "puryfi_version": None,
+                    "puryfi_username": PROFILE_USERNAME,
+                    "puryfi_support_tier": PROFILE_SUPPORT_TIER,
                 }
+
+    def test_optional_puryfi_state_is_published_to_the_session_watcher(
+        self, client, seed_lock_configuration, monkeypatch
+    ):
+        seed_lock_configuration(
+            session_id="state-session", link_token="state-token"
+        )
+
+        async def fake_get_session_auth(_main_token: str) -> dict:
+            return {"role": "wearer", "session": {"sessionId": "state-session"}}
+
+        monkeypatch.setattr(chaster_api, "get_session_auth", fake_get_session_auth)
+
+        with client.websocket_connect("/ws/session/main-token") as watcher:
+            assert watcher.receive_json()["is_online"] is False
+
+            with client.websocket_connect("/ws/state-token") as puryfi:
+                send_ready(puryfi)
+                # The ready status does not know the optional state yet.
+                assert watcher.receive_json()["is_online"] is True
+
+                answer_handshake(
+                    puryfi,
+                    granted_intents=[
+                        *INTENTS,
+                        "readEnabledState",
+                        "readLockConfigurationState",
+                    ],
+                    puryfi_enabled=True,
+                    has_lock=True,
+                )
+
+                frame = watcher.receive_json()
+                for _ in range(10):
+                    if "puryfi_enabled" in frame:
+                        break
+                    frame = watcher.receive_json()
+
+                assert frame["puryfi_username"] == PROFILE_USERNAME
+                assert frame["puryfi_enabled"] is True
+                assert frame["puryfi_has_lock"] is True
+
+                puryfi.close()
 
     def test_session_deleted_closes_plugin_and_watcher_sockets(
         self, client, seed_lock_configuration, mongo_db, monkeypatch
@@ -521,6 +627,8 @@ class TestRealtimeStatus:
                     "is_online": True,
                     "has_linked_plugin": True,
                     "puryfi_version": "0.8.7.1",
+                    "puryfi_username": None,
+                    "puryfi_support_tier": None,
                 }
 
                 payload = {
@@ -542,6 +650,8 @@ class TestRealtimeStatus:
                     "is_online": False,
                     "has_linked_plugin": True,
                     "puryfi_version": None,
+                    "puryfi_username": None,
+                    "puryfi_support_tier": None,
                 }
                 # Drain frames queued before the close (ready response, init
                 # RPCs) until the close frame arrives.
@@ -586,6 +696,8 @@ class TestRealtimeStatus:
                 "is_online": False,
                 "has_linked_plugin": True,
                 "puryfi_version": None,
+                "puryfi_username": None,
+                "puryfi_support_tier": None,
             }
 
     def test_http_status_is_online_only_after_ready(

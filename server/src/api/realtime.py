@@ -48,6 +48,14 @@ async def watch_session(
         # while Puryfi was already connected.
         await websocket.send_json(registry.status_for_lock_config(lock_config))
 
+        # The profile/state may have been missed while PuryFi was loading the
+        # account. Ask the live plugin for a fresh getState snapshot; the
+        # result is pushed through the normal status broadcast.
+        connection = registry.get(lock_config.link_token or "")
+        request_refresh = getattr(connection, "request_snapshot_refresh", None)
+        if request_refresh is not None:
+            request_refresh()
+
         while True:
             try:
                 # The page only listens; use a timeout to send heartbeats and

@@ -7,12 +7,22 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket
 
-from domain.entities import ChasterExtensionConfigSchema, LockSession
+from domain.entities import (
+    ChasterExtensionConfigSchema,
+    LockSession,
+    PuryfiSupportTierSchema,
+)
 from domain.ports import LockSessionRepository, MediaScanSink, MessageQueue
 from infra.logging import get_logger
 from infra.queue import MongoMessageQueue
 from infra.repositories import MongoLockSessionRepository
-from realtime.protocol import decode, encode, intents, manifest
+from realtime.protocol import (
+    decode,
+    encode,
+    intents,
+    manifest,
+    optional_intents,
+)
 from workers.outbound import drain_queued_messages
 
 log = get_logger(__name__)
@@ -77,15 +87,25 @@ class Connection:
         self.configuration: dict = {}
 
         self.username: str | None = None
+        self.support_tier: PuryfiSupportTierSchema | None = None
         self.ready = False
         # Metadata advertised by PuryFi in `ready`, kept for diagnostics.
         self.puryfi_version: str | None = None
         self.api_version: str | None = None
         self.instance_id: str | None = None
+        # Live PuryFi state shown in the extension UI (optional permissions).
+        self.granted_intents: set[str] = set()
+        self.puryfi_enabled: bool | None = None
+        self.puryfi_has_lock: bool | None = None
 
         self.intents_granted_event = asyncio.Event()
         self._ready_handled = False
         self._tasks: set[asyncio.Task] = set()
+        # Intent-gated setup (profile + media scan subscription) runs once,
+        # either at the end of the bootstrap or when the grant arrives later.
+        self._handshake_completed = False
+        self._intents_setup_lock = asyncio.Lock()
+        self._intents_setup_done = False
 
         self._sessions = sessions or MongoLockSessionRepository()
         self._queue = queue or MongoMessageQueue()
@@ -103,6 +123,9 @@ class Connection:
         # Serialize queue drains: the bootstrap, the `intentsGrant` handler and
         # webhook-triggered flushes must never deliver the same command twice.
         self._drain_lock = asyncio.Lock()
+        # Serialize profile/state snapshots: the handshake, optional intent
+        # grants and browser watchers can all request a refresh.
+        self._snapshot_lock = asyncio.Lock()
         self._closed = False
 
     # Seconds to wait for a Puryfi client response before failing the RPC.
@@ -359,17 +382,42 @@ class Connection:
             self.configuration = configuration
 
         elif msg_type == "intentsGrant":
-            granted_intents = payload.get("intents", [])
-            if all(intent in granted_intents for intent in intents):
+            granted = set(payload.get("intents", []))
+            previous = self.granted_intents
+            self.granted_intents = granted
+
+            newly_optional = {
+                intent
+                for intent in optional_intents
+                if intent in granted and intent not in previous
+            }
+            if newly_optional and self.ready and self._handshake_completed:
+                self._spawn(
+                    self.refresh_puryfi_state(),
+                    name="puryfi-optional-state-refresh",
+                )
+
+            if all(intent in granted for intent in intents):
                 newly_granted = not self.intents_granted_event.is_set()
                 self.intents_granted_event.set()
                 # Commands queued while intents were missing must not wait for
-                # a reconnect: drain them as soon as the grant arrives.
-                if newly_granted and self.ready:
+                # a reconnect: finish the intent-gated setup, then drain them
+                # as soon as the grant arrives.
+                if (
+                    newly_granted
+                    and self.ready
+                    and self._handshake_completed
+                ):
                     self._spawn(
-                        self.flush_queue(),
+                        self._on_intents_granted(),
                         name="puryfi-intents-drain",
                     )
+
+        elif msg_type == "stateChange":
+            # Keep the cached profile and PuryFi state in sync. These handlers
+            # only touch memory; persistence runs in a supervised task.
+            self._handle_profile_state_change(payload)
+            self._handle_puryfi_state_change(payload)
 
         elif msg_type == "staticMediaScan":
             # Never do I/O here: PuryFi can emit dozens of scans per second and
@@ -466,18 +514,20 @@ class Connection:
             await self.close(code=1011)
             return
 
-        try:
-            await self.process_queued_messages(self.user_link_token)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception(
-                "connection.queue_drain_failed",
-                session_id=self.session.session_id,
-            )
+        # Never block the handshake on a pending intents approval: the queue
+        # is drained by `intentsGrant` if the user grants them later.
+        await self._on_intents_granted()
 
     async def initialize_plugin(self) -> bool:
-        """Initialize the Puryfi plugin. Returns True only on full success."""
+        """Send the mandatory handshake messages.
+
+        Intents may still be pending when this returns True: PuryFi requires
+        the user to approve them, possibly long after the connection opened.
+        The grant arrives as an ``intentsGrant`` event, which triggers the
+        intent-gated setup and queue drain. Returns False only when a
+        mandatory RPC failed.
+        """
+        step = "setPluginManifest"
         try:
             # 1. Set Plugin Manifest
             res = await self.send_message("setPluginManifest", {"manifest": manifest})
@@ -490,6 +540,7 @@ class Connection:
                 return False
 
             # 2. Set Plugin Configuration
+            step = "setPluginConfiguration"
             res = await self.send_message(
                 "setPluginConfiguration", {"configuration": self.configuration}
             )
@@ -501,7 +552,8 @@ class Connection:
                 )
                 return False
 
-            # 3. Request Intents
+            # 3. Read the intents already granted in the past.
+            step = "getPluginIntents"
             res = await self.send_message("getPluginIntents", {})
             if res.get("type", "") == "error":
                 log.warning(
@@ -511,11 +563,20 @@ class Connection:
                 )
                 return False
 
-            # 4. Request Intents
-            granted_intents = res.get("intents", [])
-            if all(intent in granted_intents for intent in intents):
-                self.intents_granted_event.set()
-            else:
+            # 4. Request the missing intents. PuryFi only marks them pending;
+            # the user (or the runtime) grants them with `intentsGrant`.
+            granted_intents = set(res.get("intents", []))
+            self.granted_intents = granted_intents
+            missing_intents = [
+                intent for intent in intents if intent not in granted_intents
+            ]
+            missing_optional = [
+                intent
+                for intent in optional_intents
+                if intent not in granted_intents
+            ]
+            if missing_intents:
+                step = "requestPluginIntents"
                 res = await self.send_message(
                     "requestPluginIntents", {"intents": intents}
                 )
@@ -526,33 +587,32 @@ class Connection:
                         error=res.get("message"),
                     )
                     return False
-                # Wait for the client to grant intents through the
-                # 'intentsGrant' message.
-                await asyncio.wait_for(
-                    self.intents_granted_event.wait(),
-                    timeout=self.INTENTS_TIMEOUT_SECONDS,
-                )
-
-            # Get User State for username
-            res = await self.send_message("getState", {"path": "user.username"})
-            self.username = res.get("value")
-
-            # Subscribe to static media scans
-            res = await self.send_message("subscribeToStaticMediaScans", {})
-            if res.get("type", "") == "error":
-                log.warning(
-                    "connection.plugin_scan_subscription_failed",
+                log.info(
+                    "connection.intents_pending",
                     session_id=self.session.session_id,
-                    error=res.get("message"),
+                    missing_intents=missing_intents,
+                    optional_intents=missing_optional,
                 )
-                return False
+                await self._request_optional_intents(missing_optional)
+            elif missing_optional:
+                # Optional permissions only power the live state display: the
+                # handshake must not wait for the user to approve them.
+                await self._request_optional_intents(missing_optional)
+                self.intents_granted_event.set()
+            else:
+                self.intents_granted_event.set()
 
+            self._handshake_completed = True
+            if self.intents_granted:
+                step = "subscribeToStaticMediaScans"
+                await self._complete_intents_setup()
             return True
 
         except TimeoutError:
             log.warning(
-                "connection.intents_timeout",
+                "connection.handshake_rpc_timeout",
                 session_id=self.session.session_id,
+                step=step,
             )
             return False
         except asyncio.CancelledError:
@@ -563,6 +623,351 @@ class Connection:
                 session_id=self.session.session_id,
             )
             return False
+
+    async def _request_optional_intents(
+        self, missing_optional: list[str]
+    ) -> None:
+        """Ask for optional state permissions without failing the handshake."""
+        if not missing_optional:
+            return
+
+        try:
+            res = await self.send_message(
+                "requestPluginIntents", {"intents": optional_intents}
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning(
+                "connection.optional_intents_request_failed",
+                session_id=self.session.session_id,
+                exc_info=True,
+            )
+            return
+
+        if isinstance(res, dict) and res.get("type") == "error":
+            log.warning(
+                "connection.optional_intents_request_rejected",
+                session_id=self.session.session_id,
+                error=res.get("message"),
+            )
+            return
+
+        log.info(
+            "connection.optional_intents_pending",
+            session_id=self.session.session_id,
+            optional_intents=missing_optional,
+        )
+
+    async def _on_intents_granted(self) -> None:
+        """Finish intent-gated setup, then deliver the queued commands."""
+        try:
+            await self._complete_intents_setup()
+            await self.flush_queue()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception(
+                "connection.intents_setup_failed",
+                session_id=self.session.session_id,
+            )
+
+    async def _complete_intents_setup(self) -> None:
+        """Run the RPCs that require intents, exactly once per connection."""
+        if not self._handshake_completed or not self.intents_granted:
+            return
+
+        async with self._intents_setup_lock:
+            if (
+                self._intents_setup_done
+                or not self._handshake_completed
+                or not self.intents_granted
+            ):
+                return
+
+            # Read the PuryFi profile/state used by the session UI. This is
+            # diagnostic metadata: a failure must not fail the handshake.
+            await self.refresh_snapshot(publish=False)
+            self._schedule_profile_retry()
+
+            # Subscribe to static media scans
+            res = await self.send_message("subscribeToStaticMediaScans", {})
+            if res.get("type", "") == "error":
+                log.warning(
+                    "connection.plugin_scan_subscription_failed",
+                    session_id=self.session.session_id,
+                    error=res.get("message"),
+                )
+                return
+
+            self._intents_setup_done = True
+
+    async def _read_state_result(
+        self, path: str
+    ) -> tuple[bool, object | None]:
+        """Read one PuryFi state path without making it handshake-critical.
+
+        Returns ``(True, value)`` for a successful response, including a
+        legitimate ``null`` value, and ``(False, None)`` on transport or
+        runtime errors.
+        """
+        try:
+            res = await self.send_message("getState", {"path": path})
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning(
+                "connection.profile_state_failed",
+                session_id=self.session.session_id,
+                path=path,
+                exc_info=True,
+            )
+            return False, None
+
+        if not isinstance(res, dict):
+            return False, None
+        if res.get("type") == "error":
+            log.debug(
+                "connection.profile_state_rejected",
+                session_id=self.session.session_id,
+                path=path,
+                error=res.get("message"),
+            )
+            return False, None
+        return True, res.get("value")
+
+    async def _read_state(self, path: str) -> object | None:
+        ok, value = await self._read_state_result(path)
+        return value if ok else None
+
+    def _apply_username(
+        self, value: object, updates: dict[str, object]
+    ) -> None:
+        if (
+            isinstance(value, str)
+            and value
+            and value != getattr(self.session, "puryfi_username", None)
+        ):
+            self.username = value
+            self.session.puryfi_username = value
+            updates["puryfi_username"] = value
+
+    def _apply_support_tier(
+        self, value: object, updates: dict[str, object]
+    ) -> None:
+        if not isinstance(value, dict):
+            return
+
+        try:
+            support_tier = PuryfiSupportTierSchema(**value)
+        except (TypeError, ValueError):
+            log.warning(
+                "connection.profile_support_tier_invalid",
+                session_id=self.session.session_id,
+            )
+            return
+
+        if support_tier != getattr(self.session, "puryfi_support_tier", None):
+            self.support_tier = support_tier
+            self.session.puryfi_support_tier = support_tier
+            updates["puryfi_support_tier"] = support_tier
+
+    async def _load_profile(self) -> bool:
+        """Read and persist the PuryFi user profile shown in the extension UI.
+
+        The root ``user`` path is read first because PuryFi exposes it as
+        ``null`` while the account is unavailable; the leaf paths are only a
+        fallback for older runtimes.
+        """
+        updates: dict[str, object] = {}
+
+        profile = await self._read_state("user")
+        if isinstance(profile, dict):
+            self._apply_username(profile.get("username"), updates)
+            self._apply_support_tier(profile.get("supportTier"), updates)
+        else:
+            self._apply_username(
+                await self._read_state("user.username"), updates
+            )
+            self._apply_support_tier(
+                await self._read_state("user.supportTier"), updates
+            )
+
+        if updates:
+            await self._persist_profile(updates)
+        return bool(updates)
+
+    async def _subscribe_to_state(self) -> None:
+        """Subscribe to every state path needed by the session UI.
+
+        Subscribing to ``user`` (instead of ``user.username``) still works
+        when PuryFi temporarily exposes ``user`` as ``null``.
+        """
+        paths = ["user"]
+        if "readEnabledState" in self.granted_intents:
+            paths.append("enabled")
+        if "readLockConfigurationState" in self.granted_intents:
+            paths.append("lockConfiguration")
+
+        try:
+            responses = await self.send_messages(
+                [("subscribeToState", {"path": path}) for path in paths]
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning(
+                "connection.state_subscription_failed",
+                session_id=self.session.session_id,
+                paths=paths,
+                exc_info=True,
+            )
+            return
+
+        for path, res in zip(paths, responses, strict=False):
+            if isinstance(res, dict) and res.get("type") == "error":
+                log.warning(
+                    "connection.state_subscription_rejected",
+                    session_id=self.session.session_id,
+                    path=path,
+                    error=res.get("message"),
+                )
+
+    async def _load_puryfi_state(self) -> bool:
+        """Read the optional enabled/lock state without keeping any secret."""
+        changed = False
+
+        if "readEnabledState" in self.granted_intents:
+            ok, value = await self._read_state_result("enabled")
+            if ok and isinstance(value, bool) and value != self.puryfi_enabled:
+                self.puryfi_enabled = value
+                changed = True
+
+        if "readLockConfigurationState" in self.granted_intents:
+            ok, value = await self._read_state_result("lockConfiguration")
+            if ok:
+                has_lock = isinstance(value, dict)
+                if has_lock != self.puryfi_has_lock:
+                    self.puryfi_has_lock = has_lock
+                    changed = True
+
+        return changed
+
+    async def refresh_puryfi_state(self) -> None:
+        """Refresh only the optional PuryFi state (permission-gated)."""
+        if not self.can_send_protected:
+            return
+        async with self._snapshot_lock:
+            if not self.can_send_protected:
+                return
+            await self._subscribe_to_state()
+            if await self._load_puryfi_state():
+                await self._publish_status()
+
+    async def refresh_snapshot(self, *, publish: bool = True) -> None:
+        """Re-read the profile and optional state from a live PuryFi client."""
+        if not self.can_send_protected:
+            return
+        async with self._snapshot_lock:
+            if not self.can_send_protected:
+                return
+            await self._subscribe_to_state()
+            profile_changed = await self._load_profile()
+            state_changed = await self._load_puryfi_state()
+            if publish and (profile_changed or state_changed):
+                await self._publish_status()
+
+    def request_snapshot_refresh(self) -> None:
+        """Schedule a snapshot refresh from a browser watcher (best effort)."""
+        if self.can_send_protected:
+            self._spawn(
+                self.refresh_snapshot(),
+                name="puryfi-snapshot-refresh",
+            )
+
+    async def _retry_profile_until_available(self) -> None:
+        """Retry a few times while PuryFi is still loading the account."""
+        for delay in (2.0, 8.0, 30.0):
+            await asyncio.sleep(delay)
+            if (
+                self._closed
+                or not self.can_send_protected
+                or getattr(self.session, "puryfi_username", None)
+            ):
+                return
+            await self.refresh_snapshot()
+
+    def _schedule_profile_retry(self) -> None:
+        if getattr(self.session, "puryfi_username", None):
+            return
+        self._spawn(
+            self._retry_profile_until_available(),
+            name="puryfi-profile-retry",
+        )
+
+    def _handle_puryfi_state_change(self, payload: dict) -> None:
+        """Update the cached enabled/lock state reported by PuryFi."""
+        path = payload.get("path")
+        value = payload.get("value")
+        changed = False
+
+        if path == "enabled" and isinstance(value, bool):
+            if value != self.puryfi_enabled:
+                self.puryfi_enabled = value
+                changed = True
+        elif path == "lockConfiguration":
+            has_lock = isinstance(value, dict)
+            if has_lock != self.puryfi_has_lock:
+                self.puryfi_has_lock = has_lock
+                changed = True
+
+        if changed:
+            self._spawn(self._publish_status(), name="puryfi-state-publish")
+
+    def _handle_profile_state_change(self, payload: dict) -> None:
+        """Update the cached profile when PuryFi reports a ``user`` change."""
+        path = payload.get("path")
+        value = payload.get("value")
+        updates: dict[str, object] = {}
+
+        if path == "user" and isinstance(value, dict):
+            self._apply_username(value.get("username"), updates)
+            self._apply_support_tier(value.get("supportTier"), updates)
+        elif path == "user.username":
+            self._apply_username(value, updates)
+        elif path == "user.supportTier":
+            self._apply_support_tier(value, updates)
+
+        if updates:
+            self._spawn(
+                self._persist_profile_and_publish(updates),
+                name="puryfi-profile-sync",
+            )
+
+    async def _persist_profile_and_publish(
+        self, updates: dict[str, object]
+    ) -> None:
+        await self._persist_profile(updates)
+        await self._publish_status()
+
+    async def _persist_profile(self, updates: dict[str, object]) -> None:
+        """Best-effort persistence: the profile is not needed to lock PuryFi."""
+        if not self.session.session_id:
+            return
+
+        update = getattr(self._sessions, "update", None)
+        if update is None:
+            return
+
+        try:
+            await update(self.session.session_id, **updates)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception(
+                "connection.profile_persist_failed",
+                session_id=self.session.session_id,
+            )
 
     async def on_linked(self, session: LockSession) -> None:
         """Called by the outbound worker after a successful link transition."""

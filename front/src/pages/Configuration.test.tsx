@@ -81,6 +81,25 @@ describe("Configuration page", () => {
         expect(screen.getByText("v0.8.7.1")).toBeInTheDocument();
     });
 
+    it("shows the PuryFi profile and support tier while online", async () => {
+        setChasterHash({ partnerConfigurationToken: "config-token" });
+        fetchConfigurationMock.mockResolvedValue(
+            makeConfiguration({
+                is_online: true,
+                has_linked_plugin: true,
+                puryfi_version: "0.8.7.1",
+                puryfi_username: "alice",
+                puryfi_support_tier: { level: 2, name: "Supporter" },
+            }),
+        );
+
+        render(<Configuration />);
+
+        expect(await screen.findByText("Puryfi is connected")).toBeInTheDocument();
+        expect(screen.getAllByText(/alice/).length).toBeGreaterThan(0);
+        expect(screen.getByText("Supporter")).toBeInTheDocument();
+    });
+
     it("renders the no-session state", async () => {
         setChasterHash({ partnerConfigurationToken: "config-token" });
         fetchConfigurationMock.mockResolvedValue(

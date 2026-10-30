@@ -112,12 +112,30 @@ class ConnectionManager:
     def status_for_lock_config(self, lock_config: LockSession) -> dict[str, Any]:
         """Current Puryfi link status, shaped for the extension UI sockets."""
         link_token = lock_config.link_token or ""
-        return {
+        support_tier = getattr(lock_config, "puryfi_support_tier", None)
+        connection = self._connections.get(link_token)
+        payload = {
             "type": "status",
             "is_online": self.is_online(link_token),
             "has_linked_plugin": lock_config.has_linked_plugin,
             "puryfi_version": self.get_version(link_token),
+            "puryfi_username": getattr(lock_config, "puryfi_username", None),
+            "puryfi_support_tier": (
+                support_tier.model_dump()
+                if hasattr(support_tier, "model_dump")
+                else support_tier
+            ),
         }
+
+        if connection is not None:
+            enabled = getattr(connection, "puryfi_enabled", None)
+            has_lock = getattr(connection, "puryfi_has_lock", None)
+            if enabled is not None:
+                payload["puryfi_enabled"] = enabled
+            if has_lock is not None:
+                payload["puryfi_has_lock"] = has_lock
+
+        return payload
 
     # Domain-friendly alias.
     def status_for_session(self, session: LockSession) -> dict[str, Any]:

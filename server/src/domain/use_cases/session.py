@@ -34,6 +34,8 @@ def _session_response(
         is_online=puryfi.is_online(session.link_token or ""),
         has_linked_plugin=session.has_linked_plugin,
         puryfi_version=puryfi.get_version(session.link_token or ""),
+        puryfi_username=session.puryfi_username,
+        puryfi_support_tier=session.puryfi_support_tier,
         link_token=link_token,
         config=session.config,
         lock_password=lock_password,
@@ -89,6 +91,8 @@ async def create_link_token(
         id=session.id or "",
         role="wearer",
         has_linked_plugin=session.has_linked_plugin,
+        puryfi_username=session.puryfi_username,
+        puryfi_support_tier=session.puryfi_support_tier,
         link_token=session.link_token,
         # lock_password deliberately omitted: the wearer must never receive
         # the cleartext password.

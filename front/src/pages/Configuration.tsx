@@ -6,6 +6,7 @@ import CensoredMediaOptions from "@/components/common/configuration/CensoredMedi
 import ConfigurationSkeleton from "@/components/common/configuration/ConfigurationSkeleton";
 import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
+import PuryfiProfile from "@/components/common/sessions/PuryfiProfile";
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
 import { useConfiguration } from "@/hooks/useConfiguration";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type {
     ChasterExtensionConfigSchema,
     ChasterExtensionConfigurationSchema,
+    PuryfiRealtimeStatus,
 } from "@/types/api";
 
 const CHASTER_ORIGIN = "https://chaster.app";
@@ -146,7 +148,10 @@ export default function Configuration() {
                 <ConfigurationSkeleton />
             ) : liveConfigurationData ? (
                 <>
-                    <ConnectionStatus data={liveConfigurationData} />
+                    <ConnectionStatus
+                        data={liveConfigurationData}
+                        liveStatus={realtimeStatus}
+                    />
 
                     {liveConfigurationData.config ? (
                         <div className="flex flex-col gap-5">
@@ -189,7 +194,13 @@ export default function Configuration() {
     );
 }
 
-function ConnectionStatus({ data }: { data: ChasterExtensionConfigurationSchema }) {
+function ConnectionStatus({
+    data,
+    liveStatus,
+}: {
+    data: ChasterExtensionConfigurationSchema;
+    liveStatus?: PuryfiRealtimeStatus | null;
+}) {
     const isOnline = data.is_online;
 
     const tone = isOnline
@@ -246,8 +257,27 @@ function ConnectionStatus({ data }: { data: ChasterExtensionConfigurationSchema 
                     {isOnline && data.puryfi_version ? (
                         <StatusPill tone="neutral">v{data.puryfi_version}</StatusPill>
                     ) : null}
+                    {liveStatus?.puryfi_enabled != null ? (
+                        <StatusPill
+                            tone={liveStatus.puryfi_enabled ? "online" : "neutral"}
+                        >
+                            {liveStatus.puryfi_enabled ? "Enabled" : "Disabled"}
+                        </StatusPill>
+                    ) : null}
+                    {liveStatus?.puryfi_has_lock != null ? (
+                        <StatusPill
+                            tone={liveStatus.puryfi_has_lock ? "info" : "neutral"}
+                        >
+                            {liveStatus.puryfi_has_lock ? "Lock set" : "No lock"}
+                        </StatusPill>
+                    ) : null}
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-slate-400">{description}</p>
+                <PuryfiProfile
+                    username={data.puryfi_username}
+                    supportTier={data.puryfi_support_tier}
+                    className="mt-2"
+                />
             </div>
         </div>
     );

@@ -57,6 +57,13 @@ class CensorPicsConfigSchema(BaseModel):
     enabled: bool = False
 
 
+class PuryfiSupportTierSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    level: int | None = None
+    name: str | None = None
+
+
 class ChasterExtensionConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -78,6 +85,8 @@ class ChasterExtensionConfigurationSchema(BaseModel):
     is_online: bool = False
     has_linked_plugin: bool = False
     puryfi_version: str | None = None
+    puryfi_username: str | None = None
+    puryfi_support_tier: PuryfiSupportTierSchema | None = None
     link_token: str | None = None
 
     # Chaster extension configuration
@@ -97,6 +106,8 @@ class ChasterExtensionSessionSchema(BaseModel):
     is_online: bool = False
     has_linked_plugin: bool = False
     puryfi_version: str | None = None
+    puryfi_username: str | None = None
+    puryfi_support_tier: PuryfiSupportTierSchema | None = None
     link_token: str | None = None
 
     # Lock configuration
@@ -120,6 +131,7 @@ class LockSession:
     keyholder_id: str | None = None
     wearer_id: str | None = None
     puryfi_username: str | None = None
+    puryfi_support_tier: PuryfiSupportTierSchema | None = None
     seen_censored_objects: int = 0
     lock_password: str | None = None
 

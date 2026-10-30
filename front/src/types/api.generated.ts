@@ -149,6 +149,9 @@ export interface components {
             has_linked_plugin: boolean;
             /** Puryfi Version */
             puryfi_version?: string | null;
+            /** Puryfi Username */
+            puryfi_username?: string | null;
+            puryfi_support_tier?: components["schemas"]["PuryfiSupportTierSchema"] | null;
             /** Link Token */
             link_token?: string | null;
             /**
@@ -176,6 +179,9 @@ export interface components {
             has_linked_plugin: boolean;
             /** Puryfi Version */
             puryfi_version?: string | null;
+            /** Puryfi Username */
+            puryfi_username?: string | null;
+            puryfi_support_tier?: components["schemas"]["PuryfiSupportTierSchema"] | null;
             /** Link Token */
             link_token?: string | null;
             config?: components["schemas"]["ChasterExtensionConfigSchema"] | null;
@@ -186,6 +192,13 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail: components["schemas"]["ValidationError"][];
+        };
+        /** PuryfiSupportTierSchema */
+        PuryfiSupportTierSchema: {
+            /** Level */
+            level: number | null;
+            /** Name */
+            name: string | null;
         };
         /** ValidationError */
         ValidationError: {

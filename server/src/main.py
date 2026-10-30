@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import configuration, realtime, session, webhooks
+from api import configuration, health, realtime, session, webhooks
 from config import Settings
 from container import build_container, set_active_container
 from infra.chaster import close_chaster_client, configure_chaster_client
@@ -96,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # (including CORS errors) carries the request id and the redacted path.
     app.add_middleware(RequestContextMiddleware)
 
+    app.include_router(health.router)
     app.include_router(realtime.router)
     app.include_router(webhooks.router)
     app.include_router(session.router)

@@ -1,10 +1,16 @@
 import { Link2, ShieldCheck } from "lucide-react";
 
+import PuryfiProfile from "@/components/common/sessions/PuryfiProfile";
 import LinkPuryfiCard from "@/components/common/sessions/wearer/LinkPuryfiCard";
 import StatusPill from "@/components/ui/status-pill";
-import type { ChasterExtensionSessionSchema } from "@/types/api";
+import type { ChasterExtensionSessionSchema, PuryfiRealtimeStatus } from "@/types/api";
 
-export default function PuryfiConnection({ session }: { session: ChasterExtensionSessionSchema }) {
+interface PuryfiConnectionProps {
+    session: ChasterExtensionSessionSchema;
+    liveStatus?: PuryfiRealtimeStatus | null;
+}
+
+export default function PuryfiConnection({ session, liveStatus }: PuryfiConnectionProps) {
     if (!session.is_online) {
         return <LinkPuryfiCard session={session} />;
     }
@@ -26,10 +32,29 @@ export default function PuryfiConnection({ session }: { session: ChasterExtensio
                         {session.puryfi_version ? (
                             <StatusPill tone="neutral">v{session.puryfi_version}</StatusPill>
                         ) : null}
+                        {liveStatus?.puryfi_enabled != null ? (
+                            <StatusPill
+                                tone={liveStatus.puryfi_enabled ? "online" : "neutral"}
+                            >
+                                {liveStatus.puryfi_enabled ? "Enabled" : "Disabled"}
+                            </StatusPill>
+                        ) : null}
+                        {liveStatus?.puryfi_has_lock != null ? (
+                            <StatusPill
+                                tone={liveStatus.puryfi_has_lock ? "info" : "neutral"}
+                            >
+                                {liveStatus.puryfi_has_lock ? "Lock set" : "No lock"}
+                            </StatusPill>
+                        ) : null}
                     </div>
                     <p className="mt-1 text-xs leading-relaxed text-slate-400">
                         Your Puryfi client is linked to this lock and listening for censorship events.
                     </p>
+                    <PuryfiProfile
+                        username={session.puryfi_username}
+                        supportTier={session.puryfi_support_tier}
+                        className="mt-2"
+                    />
                 </div>
             </div>
 

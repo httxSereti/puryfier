@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { Info, KeyRound, Unplug } from "lucide-react";
 
+import PuryfiProfile from "@/components/common/sessions/PuryfiProfile";
 import LinkTokenModal from "@/components/common/sessions/wearer/LinkTokenModal";
 import { Button } from "@/components/ui/button";
 import StatusPill from "@/components/ui/status-pill";
@@ -47,6 +48,11 @@ export default function LinkPuryfiCard({ session }: { session: ChasterExtensionS
                             ? "The plugin is registered, but the WebSocket connection is not active right now."
                             : "Connect your Puryfi client to start syncing censorship events with this lock."}
                     </p>
+                    <PuryfiProfile
+                        username={session.puryfi_username}
+                        supportTier={session.puryfi_support_tier}
+                        className="mt-2"
+                    />
                 </div>
             </div>
 

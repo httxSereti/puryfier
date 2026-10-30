@@ -3,7 +3,7 @@ from typing import ClassVar
 from beanie import Document
 from pymongo import ASCENDING, IndexModel
 
-from domain.entities import ChasterExtensionConfigSchema
+from domain.entities import ChasterExtensionConfigSchema, PuryfiSupportTierSchema
 
 
 class UserLockConfiguration(Document):
@@ -27,8 +27,9 @@ class UserLockConfiguration(Document):
     # Chaster user id of the wearer
     wearer_id: str | None = None
 
-    # Puryfi username
+    # Puryfi username and supporter profile, captured during the handshake
     puryfi_username: str | None = None
+    puryfi_support_tier: PuryfiSupportTierSchema | None = None
 
     # Number of censored media scans since the last successful time penalty.
     # Persisted so reconnects/restarts do not lose progress.

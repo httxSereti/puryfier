@@ -5,7 +5,11 @@ from typing import Any
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from domain.entities import ChasterExtensionConfigSchema, LockSession
+from domain.entities import (
+    ChasterExtensionConfigSchema,
+    LockSession,
+    PuryfiSupportTierSchema,
+)
 from infra.documents import UserLockConfiguration
 
 
@@ -21,6 +25,15 @@ def _to_entity(document: dict[str, Any] | UserLockConfiguration) -> LockSession:
     if not isinstance(config, ChasterExtensionConfigSchema):
         config = ChasterExtensionConfigSchema(**config)
 
+    support_tier = raw.get("puryfi_support_tier")
+    if support_tier is not None and not isinstance(
+        support_tier, PuryfiSupportTierSchema
+    ):
+        try:
+            support_tier = PuryfiSupportTierSchema(**support_tier)
+        except (TypeError, ValueError):
+            support_tier = None
+
     return LockSession(
         id=str(raw_id) if raw_id is not None else None,
         session_id=raw["session_id"],
@@ -30,6 +43,7 @@ def _to_entity(document: dict[str, Any] | UserLockConfiguration) -> LockSession:
         keyholder_id=raw.get("keyholder_id"),
         wearer_id=raw.get("wearer_id"),
         puryfi_username=raw.get("puryfi_username"),
+        puryfi_support_tier=support_tier,
         seen_censored_objects=int(raw.get("seen_censored_objects", 0) or 0),
         lock_password=raw.get("lock_password"),
         config=config,
@@ -90,6 +104,10 @@ class MongoLockSessionRepository:
         config = update_fields.get("config")
         if isinstance(config, ChasterExtensionConfigSchema):
             update_fields["config"] = config.model_dump()
+
+        support_tier = update_fields.get("puryfi_support_tier")
+        if isinstance(support_tier, PuryfiSupportTierSchema):
+            update_fields["puryfi_support_tier"] = support_tier.model_dump()
 
         result = await self._collection.update_one(
             {"session_id": session_id}, {"$set": update_fields}

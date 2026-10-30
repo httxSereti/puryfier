@@ -38,6 +38,8 @@ async def get_configuration(
         has_linked_plugin=session.has_linked_plugin,
         is_online=puryfi.is_online(session.link_token or ""),
         puryfi_version=puryfi.get_version(session.link_token or ""),
+        puryfi_username=session.puryfi_username,
+        puryfi_support_tier=session.puryfi_support_tier,
         # Keep the token scoped to the wearer only.
         link_token=session.link_token if data.role == "wearer" else None,
         has_session=True,

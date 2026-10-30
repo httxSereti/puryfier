@@ -58,6 +58,10 @@ describe("usePuryfiRealtimeStatus", () => {
                 is_online: true,
                 has_linked_plugin: true,
                 puryfi_version: "0.8.7.1",
+                puryfi_username: "alice",
+                puryfi_support_tier: { level: 2, name: "Supporter" },
+                puryfi_enabled: true,
+                puryfi_has_lock: true,
             });
         });
 
@@ -66,6 +70,10 @@ describe("usePuryfiRealtimeStatus", () => {
                 is_online: true,
                 has_linked_plugin: true,
                 puryfi_version: "0.8.7.1",
+                puryfi_username: "alice",
+                puryfi_support_tier: { level: 2, name: "Supporter" },
+                puryfi_enabled: true,
+                puryfi_has_lock: true,
             }),
         );
 
@@ -78,6 +86,10 @@ describe("usePuryfiRealtimeStatus", () => {
             is_online: true,
             has_linked_plugin: true,
             puryfi_version: "0.8.7.1",
+            puryfi_username: "alice",
+            puryfi_support_tier: { level: 2, name: "Supporter" },
+            puryfi_enabled: true,
+            puryfi_has_lock: true,
         });
     });
 

@@ -89,6 +89,8 @@ class TestRevokeSession:
                 "is_online": False,
                 "has_linked_plugin": True,
                 "puryfi_version": None,
+                "puryfi_username": None,
+                "puryfi_support_tier": None,
             }
         ]
         assert (

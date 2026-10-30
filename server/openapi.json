@@ -286,6 +286,27 @@
             ],
             "title": "Puryfi Version"
           },
+          "puryfi_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Puryfi Username"
+          },
+          "puryfi_support_tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PuryfiSupportTierSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "link_token": {
             "anyOf": [
               {
@@ -351,6 +372,27 @@
             ],
             "title": "Puryfi Version"
           },
+          "puryfi_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Puryfi Username"
+          },
+          "puryfi_support_tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PuryfiSupportTierSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "link_token": {
             "anyOf": [
               {
@@ -403,6 +445,34 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "PuryfiSupportTierSchema": {
+        "properties": {
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "PuryfiSupportTierSchema"
       },
       "ValidationError": {
         "properties": {

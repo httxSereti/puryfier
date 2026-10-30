@@ -105,6 +105,7 @@ def seed_lock_configuration(mongo_db):
             "keyholder_id": None,
             "wearer_id": None,
             "puryfi_username": None,
+            "puryfi_support_tier": None,
             "seen_censored_objects": 0,
             "lock_password": None,
             "config": {

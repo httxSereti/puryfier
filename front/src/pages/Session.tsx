@@ -37,17 +37,24 @@ export default function Session() {
                 version={import.meta.env.VITE_APP_VERSION}
             >
                 {session ? (
-                    <StatusPill
-                        tone={
-                            session.role === "wearer"
-                                ? "wearer"
-                                : session.role === "keyholder"
-                                    ? "keyholder"
-                                    : "neutral"
-                        }
-                    >
-                        {session.role}
-                    </StatusPill>
+                    <>
+                        {session.puryfi_username ? (
+                            <StatusPill tone="info" className="normal-case tracking-[0.02em]">
+                                PuryFi: {session.puryfi_username}
+                            </StatusPill>
+                        ) : null}
+                        <StatusPill
+                            tone={
+                                session.role === "wearer"
+                                    ? "wearer"
+                                    : session.role === "keyholder"
+                                        ? "keyholder"
+                                        : "neutral"
+                            }
+                        >
+                            {session.role}
+                        </StatusPill>
+                    </>
                 ) : null}
             </PageHeader>
 
@@ -64,7 +71,7 @@ export default function Session() {
             ) : session ? (
                 <>
                     <div className={cn("grid gap-5", hasPassword && "lg:grid-cols-2")}>
-                        <PuryfiConnection session={session} />
+                        <PuryfiConnection session={session} liveStatus={realtimeStatus} />
 
                         {hasPassword && session.lock_password ? (
                             <ShowPuryfiPassword puryfiPassword={session.lock_password} />

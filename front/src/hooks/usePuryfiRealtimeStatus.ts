@@ -61,6 +61,10 @@ export function usePuryfiRealtimeStatus(
                             is_online: frame.is_online,
                             has_linked_plugin: frame.has_linked_plugin,
                             puryfi_version: frame.puryfi_version ?? null,
+                            puryfi_username: frame.puryfi_username ?? null,
+                            puryfi_support_tier: frame.puryfi_support_tier ?? null,
+                            puryfi_enabled: frame.puryfi_enabled ?? null,
+                            puryfi_has_lock: frame.puryfi_has_lock ?? null,
                         });
                     }
                 } catch {

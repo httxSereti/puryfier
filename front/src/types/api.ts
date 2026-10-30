@@ -13,6 +13,7 @@ export type ChasterExtensionConfigSchema = components["schemas"]["ChasterExtensi
 export type ChasterExtensionConfigurationSchema =
     components["schemas"]["ChasterExtensionConfigurationSchema"];
 export type ChasterExtensionSessionSchema = components["schemas"]["ChasterExtensionSessionSchema"];
+export type PuryfiSupportTierSchema = components["schemas"]["PuryfiSupportTierSchema"];
 
 /**
  * Payload pushed by the backend's realtime status channel.
@@ -24,4 +25,8 @@ export interface PuryfiRealtimeStatus {
     is_online: boolean;
     has_linked_plugin: boolean;
     puryfi_version: string | null;
+    puryfi_username: string | null;
+    puryfi_support_tier: PuryfiSupportTierSchema | null;
+    puryfi_enabled?: boolean | null;
+    puryfi_has_lock?: boolean | null;
 }

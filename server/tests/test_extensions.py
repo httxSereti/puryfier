@@ -170,6 +170,32 @@ class TestConfigurationCreation:
             == 1
         )
 
+    def test_get_exposes_the_puryfi_profile(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_lock_configuration(
+            session_id=self.SESSION_ID,
+            puryfi_username="alice",
+            puryfi_support_tier={"level": 2, "name": "Supporter"},
+        )
+        mock_chaster_api(
+            make_configuration_response(
+                role="wearer",
+                session_id=self.SESSION_ID,
+                config={"lock_on_freeze": True},
+            )
+        )
+
+        response = client.get("/api/configuration/config-token")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["puryfi_username"] == "alice"
+        assert body["puryfi_support_tier"] == {
+            "level": 2,
+            "name": "Supporter",
+        }
+
     def test_get_preserves_existing_configuration(
         self, client, seed_lock_configuration, mongo_db, mock_chaster_api
     ):
@@ -223,6 +249,45 @@ class TestFetchSessionLinkToken:
 
         assert response.status_code == 200
         assert response.json()["link_token"] is None
+
+
+class TestFetchSessionPuryfiProfile:
+    SESSION_ID = "session-1"
+
+    def test_session_exposes_the_stored_puryfi_profile(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_lock_configuration(
+            session_id=self.SESSION_ID,
+            puryfi_username="alice",
+            puryfi_support_tier={"level": 2, "name": "Supporter"},
+        )
+        mock_chaster_api(make_chaster_response(role="wearer", session_id=self.SESSION_ID))
+
+        response = client.get(f"/api/session/{self.SESSION_ID}")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["puryfi_username"] == "alice"
+        assert body["puryfi_support_tier"] == {"level": 2, "name": "Supporter"}
+
+    def test_create_link_token_keeps_the_profile(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_lock_configuration(
+            session_id=self.SESSION_ID,
+            link_token=None,
+            puryfi_username="alice",
+            puryfi_support_tier={"level": 2, "name": "Supporter"},
+        )
+        mock_chaster_api(make_chaster_response(role="wearer", session_id=self.SESSION_ID))
+
+        response = client.post("/api/session/some-main-token/link-token")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["puryfi_username"] == "alice"
+        assert body["puryfi_support_tier"] == {"level": 2, "name": "Supporter"}
 
 
 class TestCreateLinkToken:
