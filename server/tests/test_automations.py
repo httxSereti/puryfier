@@ -109,6 +109,52 @@ class TestAutomationApi:
         assert payload["automation_mode"] is True
         assert payload["effective_wearer_can_manage"] is False
 
+    def test_session_token_can_create_and_list(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_automation_session(seed_lock_configuration)
+        calls = mock_chaster_api(
+            make_chaster_response(role="keyholder", session_id=SESSION_ID)
+        )
+
+        created = client.post(
+            "/api/session/main-token/automations",
+            json=automation_payload(),
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["owner_id"] == KEYHOLDER_ID
+
+        # Session-token flows have no configuration token, so the snapshot is
+        # patched onto the running Chaster session.
+        assert any(
+            call.method == "PATCH"
+            and call.url.path == f"/api/extensions/sessions/{SESSION_ID}"
+            for call in calls
+        )
+
+        listed = client.get("/api/session/main-token/automations")
+        assert listed.status_code == 200, listed.text
+        assert len(listed.json()["automations"]) == 1
+
+        catalog = client.get("/api/session/main-token/automations/catalog")
+        assert catalog.status_code == 200
+        assert catalog.json()["events"]
+
+    def test_session_wearer_without_permission_cannot_create(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_automation_session(seed_lock_configuration)
+        mock_chaster_api(
+            make_chaster_response(role="wearer", session_id=SESSION_ID)
+        )
+
+        response = client.post(
+            "/api/session/main-token/automations",
+            json=automation_payload(),
+        )
+
+        assert response.status_code == 403
+
     def test_remove_time_action_is_accepted(
         self, client, seed_lock_configuration, mock_chaster_api
     ):

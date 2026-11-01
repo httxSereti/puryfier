@@ -28,7 +28,9 @@ export type ChasterExtensionConfigSchema = components["schemas"]["ChasterExtensi
 export type ChasterExtensionConfigurationSchema =
     components["schemas"]["ChasterExtensionConfigurationSchema"];
 export type ChasterExtensionSessionSchema = components["schemas"]["ChasterExtensionSessionSchema"];
+export type PuryfiPermissionsSchema = components["schemas"]["PuryfiPermissionsSchema"];
 export type PuryfiSupportTierSchema = components["schemas"]["PuryfiSupportTierSchema"];
+export type SessionPermissionsUpdateSchema = components["schemas"]["SessionPermissionsUpdateSchema"];
 
 /**
  * Payload pushed by the backend's realtime status channel.

@@ -18,6 +18,7 @@ VALID_CONFIG = {
         "enabled": True,
     },
     "automation_permissions": {"wearer_can_manage": False},
+    "puryfi_permissions": {"wearer_can_control": None},
     "automations_snapshot": [],
     "automations_snapshot_version": 0,
     "automations_snapshot_hash": None,
@@ -71,6 +72,100 @@ class TestConfigurationValidation:
         assert stored["config"]["automation_permissions"] == {
             "wearer_can_manage": False
         }
+
+    def test_creation_can_choose_the_puryfi_control_permission(
+        self, client, mock_chaster_api
+    ):
+        calls = mock_chaster_api({"role": "wearer", "config": {}})
+
+        payload = {
+            **VALID_CONFIG,
+            "puryfi_permissions": {"wearer_can_control": False},
+        }
+        response = client.put("/api/configuration/config-token", json=payload)
+
+        assert response.status_code == 200
+        assert json.loads(calls[-1].content) == {"config": payload}
+
+    def test_wearer_cannot_change_puryfi_control_during_a_shared_lock(
+        self, client, seed_lock_configuration, mock_chaster_api, mongo_db
+    ):
+        seed_lock_configuration(
+            session_id=SESSION_ID,
+            link_token="token-1",
+            keyholder_id="keyholder-1",
+            wearer_id="wearer-1",
+            config={"puryfi_permissions": {"wearer_can_control": False}},
+        )
+        mock_chaster_api(
+            make_configuration_response(role="wearer", session_id=SESSION_ID)
+        )
+
+        payload = {
+            **VALID_CONFIG,
+            "puryfi_permissions": {"wearer_can_control": True},
+        }
+        response = client.put("/api/configuration/config-token", json=payload)
+
+        assert response.status_code == 200
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": SESSION_ID}
+        )
+        assert stored["config"]["puryfi_permissions"]["wearer_can_control"] is False
+
+    def test_keyholder_can_change_puryfi_control_during_a_shared_lock(
+        self, client, seed_lock_configuration, mock_chaster_api, mongo_db
+    ):
+        seed_lock_configuration(
+            session_id=SESSION_ID,
+            link_token="token-1",
+            keyholder_id="keyholder-1",
+            wearer_id="wearer-1",
+            config={"puryfi_permissions": {"wearer_can_control": False}},
+        )
+        mock_chaster_api(
+            make_configuration_response(role="keyholder", session_id=SESSION_ID)
+        )
+
+        payload = {
+            **VALID_CONFIG,
+            "puryfi_permissions": {"wearer_can_control": True},
+        }
+        response = client.put("/api/configuration/config-token", json=payload)
+
+        assert response.status_code == 200
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": SESSION_ID}
+        )
+        assert stored["config"]["puryfi_permissions"]["wearer_can_control"] is True
+
+    def test_self_lock_control_permission_is_frozen_during_the_lock(
+        self, client, seed_lock_configuration, mock_chaster_api, mongo_db
+    ):
+        seed_lock_configuration(
+            session_id=SESSION_ID,
+            link_token="token-1",
+            keyholder_id=None,
+            wearer_id="wearer-1",
+            config={"puryfi_permissions": {"wearer_can_control": False}},
+        )
+        # Even if Chaster reports the user as keyholder, a self-lock has no
+        # keyholder and its creator must not be able to re-enable control.
+        mock_chaster_api(
+            make_configuration_response(role="keyholder", session_id=SESSION_ID)
+        )
+
+        payload = {
+            **VALID_CONFIG,
+            "puryfi_permissions": {"wearer_can_control": True},
+        }
+        response = client.put("/api/configuration/config-token", json=payload)
+
+        assert response.status_code == 200
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": SESSION_ID}
+        )
+        assert stored["config"]["puryfi_permissions"]["wearer_can_control"] is False
 
     def test_local_config_uses_validated_payload_when_chaster_omits_it(
         self, client, seed_lock_configuration, mock_chaster_api, mongo_db

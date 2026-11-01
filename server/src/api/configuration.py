@@ -78,20 +78,28 @@ async def update_configuration(
     response.
     """
     try:
-        # Only the keyholder (or the wearer of a self-lock) may change the
-        # automation permission. Preserve the stored value for every other
-        # role so a crafted config payload cannot grant itself access.
+        # Permissions are frozen once the session exists:
+        # - only the keyholder may change automation permissions;
+        # - the wearer may never grant themselves Puryfi control, and a
+        #   self-lock cannot change its choice while the lock is running.
         data = await chaster.get_configuration(configuration_token)
-        if data.session_id and data.role != "keyholder":
+        if data.session_id:
             session = await sessions.get_by_session_id(data.session_id)
             if session is not None:
-                payload = payload.model_copy(
-                    update={
-                        "automation_permissions": (
-                            session.config.automation_permissions
-                        )
-                    }
+                is_self_lock = not session.keyholder_id and bool(
+                    session.wearer_id
                 )
+                managed_fields = {}
+                if data.role != "keyholder":
+                    managed_fields["automation_permissions"] = (
+                        session.config.automation_permissions
+                    )
+                if is_self_lock or data.role != "keyholder":
+                    managed_fields["puryfi_permissions"] = (
+                        session.config.puryfi_permissions
+                    )
+                if managed_fields:
+                    payload = payload.model_copy(update=managed_fields)
 
         await update_configuration_use_case(
             configuration_token,

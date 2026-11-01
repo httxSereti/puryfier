@@ -209,6 +209,12 @@ Example: `count = 3`, `window_seconds = 300` means “3 matching images within 5
 
 `wearer_can_manage` is stored per lock in the Chaster configuration and mirrored in MongoDB. It defaults to false when a keyholder exists, and to true for self-locks.
 
+The separate `wearer_can_control` permission (stored in `puryfi_permissions`) controls whether the
+wearer may operate Puryfi (enable, disable, lock or unlock). `null` means the creator did not
+choose: it resolves to true for self-locks and false when a keyholder exists. An explicit choice
+always wins. Once the session exists, a wearer can never change it, and a self-lock freezes its
+choice for the whole lock.
+
 ---
 
 ## 6. Duplication and archive
@@ -236,7 +242,13 @@ Example: `count = 3`, `window_seconds = 300` means “3 matching images within 5
 | POST | `/api/configuration/{token}/automations/{id}/test` |
 | POST | `/api/configuration/{token}/automations/migrate` |
 | GET | `/api/session/{main_token}/automations` |
-| PUT | `/api/session/{main_token}/configuration` |
+| GET | `/api/session/{main_token}/automations/catalog` |
+| POST | `/api/session/{main_token}/automations` |
+| PATCH | `/api/session/{main_token}/automations/{id}` |
+| DELETE | `/api/session/{main_token}/automations/{id}` |
+| POST | `/api/session/{main_token}/automations/{id}/duplicate` |
+| POST | `/api/session/{main_token}/automations/{id}/test` |
+| PUT | `/api/session/{main_token}/permissions` |
 
 ---
 

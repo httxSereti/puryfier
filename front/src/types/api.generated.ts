@@ -47,7 +47,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/session/{main_token}/configuration": {
+    "/api/session/{main_token}/permissions": {
         parameters: {
             query?: never;
             header?: never;
@@ -56,10 +56,10 @@ export interface paths {
         };
         get?: never;
         /**
-         * Update Session Configuration Endpoint
-         * @description Update the settings of the current session from the main page.
+         * Update Session Permissions Endpoint
+         * @description Update the non-legacy permissions of the current session.
          */
-        put: operations["update_session_configuration_endpoint_api_session__main_token__configuration_put"];
+        put: operations["update_session_permissions_endpoint_api_session__main_token__permissions_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -160,7 +160,77 @@ export interface paths {
         /** List Session Automations */
         get: operations["list_session_automations_api_session__main_token__automations_get"];
         put?: never;
+        /** Create Session Automation */
+        post: operations["create_session_automation_api_session__main_token__automations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/session/{main_token}/automations/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Automation Catalog */
+        get: operations["session_automation_catalog_api_session__main_token__automations_catalog_get"];
+        put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/session/{main_token}/automations/{automation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Session Automation */
+        delete: operations["delete_session_automation_api_session__main_token__automations__automation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Session Automation */
+        patch: operations["update_session_automation_api_session__main_token__automations__automation_id__patch"];
+        trace?: never;
+    };
+    "/api/session/{main_token}/automations/{automation_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Duplicate Session Automation */
+        post: operations["duplicate_session_automation_api_session__main_token__automations__automation_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/session/{main_token}/automations/{automation_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Session Automation */
+        post: operations["test_session_automation_api_session__main_token__automations__automation_id__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -619,6 +689,7 @@ export interface components {
             unlock_on_unfreeze: boolean;
             censorPicsConfig: components["schemas"]["CensorPicsConfigSchema"];
             automation_permissions: components["schemas"]["AutomationPermissionsSchema"];
+            puryfi_permissions: components["schemas"]["PuryfiPermissionsSchema"];
             /** Automations Snapshot */
             automations_snapshot: {
                 [key: string]: unknown;
@@ -704,6 +775,11 @@ export interface components {
              * @default false
              */
             automation_mode: boolean;
+            /**
+             * Effective Wearer Can Control
+             * @default false
+             */
+            effective_wearer_can_control: boolean;
             config?: components["schemas"]["ChasterExtensionConfigSchema"] | null;
             /** Lock Password */
             lock_password?: string | null;
@@ -713,12 +789,22 @@ export interface components {
             /** Detail */
             detail: components["schemas"]["ValidationError"][];
         };
+        /** PuryfiPermissionsSchema */
+        PuryfiPermissionsSchema: {
+            /** Wearer Can Control */
+            wearer_can_control: boolean | null;
+        };
         /** PuryfiSupportTierSchema */
         PuryfiSupportTierSchema: {
             /** Level */
             level: number | null;
             /** Name */
             name: string | null;
+        };
+        /** SessionPermissionsUpdateSchema */
+        SessionPermissionsUpdateSchema: {
+            automation_permissions: components["schemas"]["AutomationPermissionsSchema"];
+            puryfi_permissions: components["schemas"]["PuryfiPermissionsSchema"];
         };
         /** ValidationError */
         ValidationError: {
@@ -793,7 +879,7 @@ export interface operations {
             };
         };
     };
-    update_session_configuration_endpoint_api_session__main_token__configuration_put: {
+    update_session_permissions_endpoint_api_session__main_token__permissions_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -804,7 +890,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ChasterExtensionConfigSchema"];
+                "application/json": components["schemas"]["SessionPermissionsUpdateSchema"];
             };
         };
         responses: {
@@ -814,7 +900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ChasterExtensionConfigSchema"];
                 };
             };
             /** @description Validation Error */
@@ -1040,6 +1126,210 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutomationListSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_session_automation_api_session__main_token__automations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationCreateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_automation_catalog_api_session__main_token__automations_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationCatalogSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_automation_api_session__main_token__automations__automation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_session_automation_api_session__main_token__automations__automation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationUpdateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_session_automation_api_session__main_token__automations__automation_id__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationDuplicateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_session_automation_api_session__main_token__automations__automation_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationTestSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationTestResultSchema"];
                 };
             };
             /** @description Validation Error */

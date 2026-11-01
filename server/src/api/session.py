@@ -1,4 +1,4 @@
-"""HTTP endpoints for opening a Chaster session and managing its settings and link token."""
+"""HTTP endpoints for opening a Chaster session and managing its link token."""
 
 import httpx
 from beanie.exceptions import CollectionWasNotInitialized
@@ -13,13 +13,14 @@ from api.deps import (
 from domain.entities import (
     ChasterExtensionConfigSchema,
     ChasterExtensionSessionSchema,
+    SessionPermissionsUpdateSchema,
 )
 from domain.errors import PermissionDeniedError, SessionNotFoundError
 from domain.ports import ChasterGateway, LockSessionRepository, PuryfiRegistry
 from domain.use_cases.session import (
     create_link_token,
     open_session,
-    update_session_configuration,
+    update_session_permissions,
 )
 
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -50,26 +51,25 @@ async def fetch_session(
         ) from e
 
 
-@router.put("/{main_token}/configuration")
-async def update_session_configuration_endpoint(
+@router.put(
+    "/{main_token}/permissions", response_model=ChasterExtensionConfigSchema
+)
+async def update_session_permissions_endpoint(
     main_token: str,
-    payload: ChasterExtensionConfigSchema,
+    payload: SessionPermissionsUpdateSchema,
     chaster: ChasterGateway = Depends(get_chaster_gateway),
     sessions: LockSessionRepository = Depends(get_session_repository),
     puryfi: PuryfiRegistry = Depends(get_puryfi_registry),
 ):
-    """Update the settings of the current session from the main page."""
+    """Update the non-legacy permissions of the current session."""
     try:
-        await update_session_configuration(
+        return await update_session_permissions(
             main_token,
             payload,
             chaster=chaster,
             sessions=sessions,
             puryfi=puryfi,
         )
-        return {"status": "ok"}
-    except PermissionDeniedError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
     except SessionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except httpx.HTTPStatusError as e:

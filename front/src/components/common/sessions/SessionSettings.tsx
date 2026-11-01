@@ -1,14 +1,13 @@
 import { useState } from "react";
-import { Check, LockKeyhole, Save, ShieldCheck } from "lucide-react";
+import { Check, Settings2, ShieldCheck } from "lucide-react";
 
 import AutomationPermissionsCard from "@/components/common/automations/AutomationPermissionsCard";
-import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
-import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
+import PuryfiControlPermissionCard from "@/components/common/configuration/PuryfiControlPermissionCard";
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/errors";
-import { updateSessionConfiguration } from "@/lib/http/session";
+import { updateSessionPermissions } from "@/lib/http/session";
 import type {
     ChasterExtensionConfigSchema,
     ChasterExtensionSessionSchema,
@@ -34,71 +33,66 @@ export default function SessionSettings({
         return null;
     }
 
-    const canManage = session.role === "keyholder" || session.is_self_lock;
-    const canEditSettings = canManage && !session.automation_mode;
-    const isDirty = JSON.stringify(draft) !== JSON.stringify(config);
-
-    const handleChange = (updatedConfig: ChasterExtensionConfigSchema) => {
-        setDraft(updatedConfig);
-    };
+    const canSave = session.role === "keyholder" && !session.is_self_lock;
+    const isDirty =
+        draft.automation_permissions.wearer_can_manage !==
+            config.automation_permissions.wearer_can_manage ||
+        draft.puryfi_permissions.wearer_can_control !==
+            config.puryfi_permissions.wearer_can_control;
 
     const handleSave = async () => {
-        if (!canManage || !isDirty || isSaving) return;
+        if (!canSave || !isDirty || isSaving) return;
 
         setIsSaving(true);
         setError(null);
         try {
-            await updateSessionConfiguration(mainToken, draft);
-            onSaved(draft);
+            const saved = await updateSessionPermissions(mainToken, {
+                automation_permissions: draft.automation_permissions,
+                puryfi_permissions: draft.puryfi_permissions,
+            });
+            setDraft(saved);
+            onSaved(saved);
         } catch (cause) {
             setError(
-                getApiErrorMessage(cause, "Could not save the settings. Please try again."),
+                getApiErrorMessage(cause, "Could not save the permissions. Please try again."),
             );
         } finally {
             setIsSaving(false);
         }
     };
 
-    const description = session.automation_mode
-        ? "This lock runs automations. The legacy settings below are read-only and no longer applied."
-        : canEditSettings
-            ? "Change how Puryfier behaves for this lock. The new settings are applied as soon as you save."
-            : "Only the keyholder can change these settings while the lock is running.";
-
     return (
         <div className="flex flex-col gap-4">
             <div className="flex items-start gap-2 px-1">
-                <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-slate-500" />
-                <p className="text-xs leading-relaxed text-slate-400">{description}</p>
+                <Settings2 className="mt-0.5 size-3.5 shrink-0 text-slate-500" />
+                <p className="text-xs leading-relaxed text-slate-400">
+                    Permissions for this lock. Legacy freeze and media settings are managed from
+                    the extension configuration page.
+                </p>
             </div>
 
             {error ? <ErrorAlert message={error} /> : null}
 
-            <AutomationPermissionsCard
+            <PuryfiControlPermissionCard
                 config={draft}
-                readOnly={!canManage}
+                role={session.role}
+                hasSession
                 selfLock={session.is_self_lock}
-                onChange={handleChange}
+                onChange={setDraft}
             />
 
-            <div className="grid gap-5 lg:grid-cols-2">
-                <GeneralConfigurationOptions
-                    config={draft}
-                    onChange={handleChange}
-                    readOnly={!canEditSettings}
-                />
-                <CensoredMediaOptions
-                    config={draft}
-                    onChange={handleChange}
-                    readOnly={!canEditSettings}
-                />
-            </div>
+            <AutomationPermissionsCard
+                config={draft}
+                readOnly={session.role !== "keyholder" && !session.is_self_lock}
+                selfLock={session.is_self_lock}
+                onChange={setDraft}
+            />
 
-            {canManage ? (
+            {canSave ? (
                 <footer className="flex flex-col gap-2 px-1 pt-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                     <span className="inline-flex items-center gap-1.5">
                         <ShieldCheck className="size-3.5" />
-                        Settings are stored on your Puryfier server and synced to Chaster.
+                        Changes are applied to the running session immediately.
                     </span>
 
                     <div className="flex items-center gap-3">
@@ -119,12 +113,18 @@ export default function SessionSettings({
                             disabled={!isDirty || isSaving}
                             className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"
                         >
-                            <Save />
-                            {isSaving ? "Saving…" : "Save settings"}
+                            <ShieldCheck />
+                            {isSaving ? "Saving…" : "Save permissions"}
                         </Button>
                     </div>
                 </footer>
-            ) : null}
+            ) : (
+                <p className="px-1 text-[11px] text-slate-500">
+                    {session.is_self_lock
+                        ? "These permissions are fixed for the duration of the lock."
+                        : "Only the keyholder can change these permissions while the lock is running."}
+                </p>
+            )}
         </div>
     );
 }

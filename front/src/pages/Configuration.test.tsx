@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Configuration from "@/pages/Configuration";
 import { fetchConfiguration } from "@/lib/http/configuration";
-import { clearLocationHash, makeConfiguration, setChasterHash } from "@/test/fixtures";
+import {
+    clearLocationHash,
+    defaultConfig,
+    makeConfiguration,
+    setChasterHash,
+} from "@/test/fixtures";
 
 vi.mock("@/lib/http/configuration", () => ({
     fetchConfiguration: vi.fn(),
@@ -47,6 +52,103 @@ describe("Configuration page", () => {
 
         await user.click(screen.getByRole("switch", { name: "Lock on freeze" }));
 
+        expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    });
+
+    it("allows choosing Puryfi control when creating a self-lock", async () => {
+        setChasterHash({ partnerConfigurationToken: "config-token" });
+        fetchConfigurationMock.mockResolvedValue(
+            makeConfiguration({
+                role: "wearer",
+                has_session: false,
+                is_self_lock: false,
+                config: defaultConfig,
+            }),
+        );
+        const user = userEvent.setup();
+
+        render(<Configuration />);
+
+        const toggle = await screen.findByRole("switch", {
+            name: "Wearer can control Puryfi",
+        });
+        expect(toggle).toBeChecked();
+        expect(toggle).toBeEnabled();
+
+        await user.click(toggle);
+
+        expect(toggle).not.toBeChecked();
+        expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    });
+
+    it("freezes the control permission once a self-lock is running", async () => {
+        setChasterHash({ partnerConfigurationToken: "config-token" });
+        fetchConfigurationMock.mockResolvedValue(
+            makeConfiguration({
+                role: "wearer",
+                has_session: true,
+                is_self_lock: true,
+                config: {
+                    ...defaultConfig,
+                    puryfi_permissions: { wearer_can_control: false },
+                },
+            }),
+        );
+
+        render(<Configuration />);
+
+        const toggle = await screen.findByRole("switch", {
+            name: "Wearer can control Puryfi",
+        });
+        expect(toggle).not.toBeChecked();
+        expect(toggle).toBeDisabled();
+        expect(
+            screen.getByText(/frozen until the lock ends/),
+        ).toBeInTheDocument();
+    });
+
+    it("keeps the control permission read-only for a shared-lock wearer", async () => {
+        setChasterHash({ partnerConfigurationToken: "config-token" });
+        fetchConfigurationMock.mockResolvedValue(
+            makeConfiguration({
+                role: "wearer",
+                has_session: true,
+                is_self_lock: false,
+            }),
+        );
+
+        render(<Configuration />);
+
+        const toggle = await screen.findByRole("switch", {
+            name: "Wearer can control Puryfi",
+        });
+        expect(toggle).not.toBeChecked();
+        expect(toggle).toBeDisabled();
+        expect(screen.getAllByText("Read only").length).toBeGreaterThan(0);
+    });
+
+    it("lets a keyholder change the control permission in a shared lock", async () => {
+        setChasterHash({ partnerConfigurationToken: "config-token" });
+        fetchConfigurationMock.mockResolvedValue(
+            makeConfiguration({
+                role: "keyholder",
+                has_session: true,
+                is_self_lock: false,
+            }),
+        );
+        const user = userEvent.setup();
+
+        render(<Configuration />);
+
+        const toggle = await screen.findByRole("switch", {
+            name: "Wearer can control Puryfi",
+        });
+        expect(toggle).not.toBeChecked();
+        expect(toggle).toBeEnabled();
+
+        await user.click(toggle);
+
+        expect(toggle).toBeChecked();
         expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     });
 

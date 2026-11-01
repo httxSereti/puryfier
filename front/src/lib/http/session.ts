@@ -1,6 +1,7 @@
 import type {
     ChasterExtensionConfigSchema,
     ChasterExtensionSessionSchema,
+    SessionPermissionsUpdateSchema,
 } from "@/types/api";
 
 import { apiClient } from "./client";
@@ -17,17 +18,18 @@ export async function fetchSession(
     return data;
 }
 
-/** Persist the settings of the current Chaster session from the main page. */
-export async function updateSessionConfiguration(
+/** Update the non-legacy permissions shown on the session page. */
+export async function updateSessionPermissions(
     mainToken: string,
-    config: ChasterExtensionConfigSchema,
+    payload: SessionPermissionsUpdateSchema,
     signal?: AbortSignal,
-): Promise<void> {
-    await apiClient.put(
-        `/api/session/${encodeURIComponent(mainToken)}/configuration`,
-        config,
+): Promise<ChasterExtensionConfigSchema> {
+    const { data } = await apiClient.put<ChasterExtensionConfigSchema>(
+        `/api/session/${encodeURIComponent(mainToken)}/permissions`,
+        payload,
         { signal },
     );
+    return data;
 }
 
 /** Generate (or reuse) the wearer's Puryfi WebSocket link token. */

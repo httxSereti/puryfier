@@ -180,9 +180,16 @@ async def sync_snapshot(
     config.automations_snapshot_version += 1
     config.automations_snapshot_hash = _snapshot_hash(snapshot)
 
-    if configuration_token and chaster is not None:
+    if chaster is not None:
         try:
-            await chaster.update_configuration(configuration_token, config)
+            if configuration_token:
+                await chaster.update_configuration(configuration_token, config)
+            else:
+                # Session-token flows have no configuration token; patch the
+                # session's own Chaster configuration instead.
+                await chaster.update_session_configuration(
+                    session.session_id, config
+                )
         except Exception:
             log.warning(
                 "automation.chaster_snapshot_failed",

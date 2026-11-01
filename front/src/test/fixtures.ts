@@ -15,6 +15,9 @@ export const defaultConfig: ChasterExtensionConfigSchema = {
     automation_permissions: {
         wearer_can_manage: false,
     },
+    puryfi_permissions: {
+        wearer_can_control: null,
+    },
     automations_snapshot: [],
     automations_snapshot_version: 0,
     automations_snapshot_hash: null,
@@ -34,6 +37,7 @@ export function makeSession(
         link_token: null,
         is_self_lock: false,
         automation_mode: false,
+        effective_wearer_can_control: false,
         config: defaultConfig,
         lock_password: null,
         ...overrides,

@@ -72,6 +72,23 @@ class AutomationPermissionsSchema(BaseModel):
     wearer_can_manage: bool = False
 
 
+class PuryfiPermissionsSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    # When true, the wearer may control Puryfi (enable, disable, lock or
+    # unlock it) for this lock. ``None`` means the creator did not choose:
+    # self-locks default to true, shared locks to false. The choice is frozen
+    # once the session exists.
+    wearer_can_control: bool | None = None
+
+
+class SessionPermissionsUpdateSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    automation_permissions: AutomationPermissionsSchema
+    puryfi_permissions: PuryfiPermissionsSchema
+
+
 class ChasterExtensionConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,6 +101,10 @@ class ChasterExtensionConfigSchema(BaseModel):
 
     automation_permissions: AutomationPermissionsSchema = Field(
         default_factory=AutomationPermissionsSchema
+    )
+
+    puryfi_permissions: PuryfiPermissionsSchema = Field(
+        default_factory=PuryfiPermissionsSchema
     )
 
     # Best-effort backup shown by the Chaster extension configuration page.
@@ -133,6 +154,7 @@ class ChasterExtensionSessionSchema(BaseModel):
     # Lock configuration
     is_self_lock: bool = False
     automation_mode: bool = False
+    effective_wearer_can_control: bool = False
     config: ChasterExtensionConfigSchema | None = None
 
     # Emergency Puryfi lock password.

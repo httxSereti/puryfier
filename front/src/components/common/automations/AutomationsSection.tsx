@@ -10,12 +10,19 @@ import SectionCard from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
 import {
     createAutomation,
+    createSessionAutomation,
     deleteAutomation,
+    deleteSessionAutomation,
     duplicateAutomation,
+    duplicateSessionAutomation,
     fetchAutomationCatalog,
     fetchAutomations,
+    fetchSessionAutomationCatalog,
+    fetchSessionAutomations,
     testAutomation,
+    testSessionAutomation,
     updateAutomation,
+    updateSessionAutomation,
 } from "@/lib/http/automations";
 import { FALLBACK_LABELS } from "@/lib/automations";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -28,12 +35,18 @@ import type {
 } from "@/types/api";
 
 interface AutomationsSectionProps {
-    configurationToken: string;
+    configurationToken?: string;
+    mainToken?: string;
+    onChanged?: () => void;
 }
 
 export default function AutomationsSection({
     configurationToken,
+    mainToken,
+    onChanged,
 }: AutomationsSectionProps) {
+    const token = configurationToken ?? mainToken ?? "";
+    const isSession = !configurationToken && Boolean(mainToken);
     const [data, setData] = useState<AutomationListSchema | null>(null);
     const [catalog, setCatalog] = useState<AutomationCatalogSchema | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -53,8 +66,13 @@ export default function AutomationsSection({
     const load = useCallback(async () => {
         try {
             const [automations, catalogData] = await Promise.all([
-                fetchAutomations(configurationToken),
-                fetchAutomationCatalog(configurationToken).catch(() => null),
+                isSession
+                    ? fetchSessionAutomations(token)
+                    : fetchAutomations(token),
+                (isSession
+                    ? fetchSessionAutomationCatalog(token)
+                    : fetchAutomationCatalog(token)
+                ).catch(() => null),
             ]);
             setData(automations);
             setCatalog(catalogData);
@@ -64,7 +82,7 @@ export default function AutomationsSection({
         } finally {
             setIsLoading(false);
         }
-    }, [configurationToken]);
+    }, [isSession, token]);
 
     useEffect(() => {
         // Defer the initial fetch by one task so the effect body itself does
@@ -97,6 +115,7 @@ export default function AutomationsSection({
         try {
             await operation();
             await load();
+            onChanged?.();
         } catch (cause) {
             setError(getApiErrorMessage(cause, "The automation could not be saved."));
         } finally {
@@ -107,9 +126,15 @@ export default function AutomationsSection({
     const handleSave = async (payload: AutomationCreateSchema) => {
         await run(async () => {
             if (editing && "id" in editing) {
-                await updateAutomation(configurationToken, editing.id, payload);
+                if (isSession) {
+                    await updateSessionAutomation(token, editing.id, payload);
+                } else {
+                    await updateAutomation(token, editing.id, payload);
+                }
+            } else if (isSession) {
+                await createSessionAutomation(token, payload);
             } else {
-                await createAutomation(configurationToken, payload);
+                await createAutomation(token, payload);
             }
             setEditorOpen(false);
             setEditing(null);
@@ -118,9 +143,12 @@ export default function AutomationsSection({
 
     const handleToggle = async (automation: AutomationSchema) => {
         await run(async () => {
-            await updateAutomation(configurationToken, automation.id, {
-                enabled: !automation.enabled,
-            });
+            const payload = { enabled: !automation.enabled };
+            if (isSession) {
+                await updateSessionAutomation(token, automation.id, payload);
+            } else {
+                await updateAutomation(token, automation.id, payload);
+            }
         });
     };
 
@@ -131,7 +159,11 @@ export default function AutomationsSection({
     const confirmDelete = async () => {
         if (!deleteSource) return;
         await run(async () => {
-            await deleteAutomation(configurationToken, deleteSource.id);
+            if (isSession) {
+                await deleteSessionAutomation(token, deleteSource.id);
+            } else {
+                await deleteAutomation(token, deleteSource.id);
+            }
             setDeleteSource(null);
         });
     };
@@ -139,11 +171,19 @@ export default function AutomationsSection({
     const handleDuplicate = async () => {
         if (!duplicateSource || !duplicateTarget) return;
         await run(async () => {
-            await duplicateAutomation(
-                configurationToken,
-                duplicateSource.id,
-                duplicateTarget,
-            );
+            if (isSession) {
+                await duplicateSessionAutomation(
+                    token,
+                    duplicateSource.id,
+                    duplicateTarget,
+                );
+            } else {
+                await duplicateAutomation(
+                    token,
+                    duplicateSource.id,
+                    duplicateTarget,
+                );
+            }
             setDuplicateSource(null);
             setDuplicateTarget("");
         });
@@ -153,7 +193,9 @@ export default function AutomationsSection({
         setBusy(true);
         setError(null);
         try {
-            const result = await testAutomation(configurationToken, automation.id);
+            const result = isSession
+                ? await testSessionAutomation(token, automation.id)
+                : await testAutomation(token, automation.id);
             setTestResult({ name: automation.name, result });
         } catch (cause) {
             setError(getApiErrorMessage(cause, "Could not test this automation."));
@@ -164,6 +206,9 @@ export default function AutomationsSection({
 
     const active = data?.automations ?? [];
     const archived = data?.archived_automations ?? [];
+    const canManage = Boolean(
+        data && (data.role === "keyholder" || data.effective_wearer_can_manage),
+    );
 
     return (
         <div className="flex flex-col gap-5">
@@ -173,18 +218,20 @@ export default function AutomationsSection({
                 description="Rules that run automatically for this lock."
                 accent="cyan"
                 action={
-                    <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                            setEditing(null);
-                            setEditorOpen(true);
-                        }}
-                        className="ml-auto bg-cyan-500 text-slate-950 hover:bg-cyan-400"
-                    >
-                        <Plus />
-                        New automation
-                    </Button>
+                    canManage ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                                setEditing(null);
+                                setEditorOpen(true);
+                            }}
+                            className="ml-auto bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+                        >
+                            <Plus />
+                            New automation
+                        </Button>
+                    ) : null
                 }
             >
                 {error ? (
@@ -198,15 +245,19 @@ export default function AutomationsSection({
                                 No automations yet
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                                Start from a template or create your own rule.
+                                {canManage
+                                    ? "Start from a template or create your own rule."
+                                    : "You do not have permission to create automations for this lock."}
                             </p>
                         </div>
-                        <AutomationTemplates
-                            onSelect={(payload) => {
-                                setEditing(payload);
-                                setEditorOpen(true);
-                            }}
-                        />
+                        {canManage ? (
+                            <AutomationTemplates
+                                onSelect={(payload) => {
+                                    setEditing(payload);
+                                    setEditorOpen(true);
+                                }}
+                            />
+                        ) : null}
                     </div>
                 ) : (
                     <div className="flex flex-col gap-2.5">
@@ -229,14 +280,16 @@ export default function AutomationsSection({
                                 onTest={handleTest}
                             />
                         ))}
-                        <div className="pt-1">
-                            <AutomationTemplates
-                                onSelect={(payload) => {
-                                    setEditing(payload);
-                                    setEditorOpen(true);
-                                }}
-                            />
-                        </div>
+                        {canManage ? (
+                            <div className="pt-1">
+                                <AutomationTemplates
+                                    onSelect={(payload) => {
+                                        setEditing(payload);
+                                        setEditorOpen(true);
+                                    }}
+                                />
+                            </div>
+                        ) : null}
                     </div>
                 )}
             </SectionCard>

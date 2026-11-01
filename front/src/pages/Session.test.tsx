@@ -4,13 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Session from "@/pages/Session";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
-import { fetchSession, updateSessionConfiguration } from "@/lib/http/session";
-import { clearLocationHash, makeSession, setChasterHash } from "@/test/fixtures";
+import { fetchSession, updateSessionPermissions } from "@/lib/http/session";
+import {
+    clearLocationHash,
+    defaultConfig,
+    makeSession,
+    setChasterHash,
+} from "@/test/fixtures";
 
 vi.mock("@/lib/http/session", () => ({
     fetchSession: vi.fn(),
     createLinkToken: vi.fn(),
-    updateSessionConfiguration: vi.fn(),
+    updateSessionPermissions: vi.fn(),
+}));
+
+vi.mock("@/components/common/automations/AutomationsSection", () => ({
+    default: () => <div>Detailed automations</div>,
 }));
 
 vi.mock("@/hooks/usePuryfiRealtimeStatus", () => ({
@@ -18,14 +27,13 @@ vi.mock("@/hooks/usePuryfiRealtimeStatus", () => ({
 }));
 
 const fetchSessionMock = vi.mocked(fetchSession);
-const updateSessionConfigurationMock = vi.mocked(updateSessionConfiguration);
+const updateSessionPermissionsMock = vi.mocked(updateSessionPermissions);
 const realtimeStatusMock = vi.mocked(usePuryfiRealtimeStatus);
 
 beforeEach(() => {
     clearLocationHash();
     fetchSessionMock.mockReset();
-    updateSessionConfigurationMock.mockReset();
-    updateSessionConfigurationMock.mockResolvedValue(undefined);
+    updateSessionPermissionsMock.mockReset();
     realtimeStatusMock.mockReset();
     realtimeStatusMock.mockReturnValue(null);
 });
@@ -140,63 +148,83 @@ describe("Session page", () => {
         expect(fetchSessionMock).toHaveBeenCalledTimes(2);
     });
 
-    it("lets a keyholder edit and save the session settings", async () => {
+    it("shows Home, Automations and Settings tabs", async () => {
         setChasterHash({ mainToken: "main-token" });
         fetchSessionMock.mockResolvedValue(makeSession({ role: "keyholder" }));
+
+        render(<Session />);
+
+        expect(await screen.findByRole("tab", { name: "Home" })).toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Automations" })).toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
+        expect(screen.getByText("Puryfi is not linked")).toBeInTheDocument();
+    });
+
+    it("shows the detailed automations tab", async () => {
+        setChasterHash({ mainToken: "main-token" });
+        fetchSessionMock.mockResolvedValue(makeSession());
+        const user = userEvent.setup();
+
+        render(<Session />);
+
+        await user.click(await screen.findByRole("tab", { name: "Automations" }));
+
+        expect(screen.getByText("Detailed automations")).toBeInTheDocument();
+    });
+
+    it("lets a keyholder save permissions from the settings tab", async () => {
+        setChasterHash({ mainToken: "main-token" });
+        fetchSessionMock.mockResolvedValue(
+            makeSession({ role: "keyholder", is_self_lock: false, config: defaultConfig }),
+        );
+        updateSessionPermissionsMock.mockResolvedValue({
+            ...defaultConfig,
+            puryfi_permissions: { wearer_can_control: true },
+        });
         const user = userEvent.setup();
 
         render(<Session />);
 
         await user.click(await screen.findByRole("tab", { name: "Settings" }));
 
-        const toggle = screen.getByRole("switch", { name: "Lock on freeze" });
-        expect(toggle).toBeChecked();
+        const control = screen.getByRole("switch", {
+            name: "Wearer can control Puryfi",
+        });
+        expect(control).not.toBeChecked();
 
-        const save = screen.getByRole("button", { name: "Save settings" });
-        expect(save).toBeDisabled();
-
-        await user.click(toggle);
-
-        expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-        expect(save).toBeEnabled();
-
-        await user.click(save);
+        await user.click(control);
+        await user.click(screen.getByRole("button", { name: "Save permissions" }));
 
         await waitFor(() =>
-            expect(updateSessionConfigurationMock).toHaveBeenCalledWith(
+            expect(updateSessionPermissionsMock).toHaveBeenCalledWith(
                 "main-token",
-                expect.objectContaining({ lock_on_freeze: false }),
+                expect.objectContaining({
+                    puryfi_permissions: { wearer_can_control: true },
+                }),
             ),
         );
         expect(await screen.findByText("Up to date")).toBeInTheDocument();
     });
 
-    it("lets a self-lock wearer edit the session settings", async () => {
+    it("keeps self-lock permissions read-only", async () => {
         setChasterHash({ mainToken: "main-token" });
-        fetchSessionMock.mockResolvedValue(makeSession({ is_self_lock: true }));
+        fetchSessionMock.mockResolvedValue(
+            makeSession({ role: "wearer", is_self_lock: true }),
+        );
         const user = userEvent.setup();
 
         render(<Session />);
 
         await user.click(await screen.findByRole("tab", { name: "Settings" }));
 
-        expect(screen.getByRole("switch", { name: "Lock on freeze" })).toBeEnabled();
-        expect(screen.getByRole("button", { name: "Save settings" })).toBeInTheDocument();
-    });
-
-    it("keeps the settings read-only for a wearer in a shared lock", async () => {
-        setChasterHash({ mainToken: "main-token" });
-        fetchSessionMock.mockResolvedValue(makeSession({ role: "wearer", is_self_lock: false }));
-        const user = userEvent.setup();
-
-        render(<Session />);
-
-        await user.click(await screen.findByRole("tab", { name: "Settings" }));
-
-        expect(screen.getByRole("switch", { name: "Lock on freeze" })).toBeDisabled();
-        expect(screen.getByText(/Only the keyholder can change these settings/)).toBeInTheDocument();
         expect(
-            screen.queryByRole("button", { name: "Save settings" }),
+            screen.getByRole("switch", { name: "Wearer can control Puryfi" }),
+        ).toBeDisabled();
+        expect(
+            screen.queryByRole("button", { name: "Save permissions" }),
         ).not.toBeInTheDocument();
+        expect(
+            screen.getByText(/fixed for the duration of the lock/),
+        ).toBeInTheDocument();
     });
 });

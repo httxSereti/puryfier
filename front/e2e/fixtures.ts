@@ -11,6 +11,9 @@ export interface E2EConfig {
     automation_permissions: {
         wearer_can_manage: boolean;
     };
+    puryfi_permissions: {
+        wearer_can_control: boolean | null;
+    };
     automations_snapshot: unknown[];
     automations_snapshot_version: number;
     automations_snapshot_hash: string | null;
@@ -25,6 +28,7 @@ export interface E2ESession {
     link_token?: string | null;
     is_self_lock?: boolean;
     automation_mode?: boolean;
+    effective_wearer_can_control?: boolean;
     config?: E2EConfig | null;
     lock_password?: string | null;
 }
@@ -53,6 +57,9 @@ export const defaultConfig: E2EConfig = {
     automation_permissions: {
         wearer_can_manage: false,
     },
+    puryfi_permissions: {
+        wearer_can_control: null,
+    },
     automations_snapshot: [],
     automations_snapshot_version: 0,
     automations_snapshot_hash: null,
@@ -68,6 +75,7 @@ export function makeSession(overrides: Partial<E2ESession> = {}): E2ESession {
         link_token: null,
         is_self_lock: false,
         automation_mode: false,
+        effective_wearer_can_control: false,
         config: defaultConfig,
         lock_password: null,
         ...overrides,
@@ -108,19 +116,17 @@ export async function mockSessionApi(
     page: Page,
     session: E2ESession,
     onLinkToken?: () => E2ESession,
-    onUpdate?: (payload: unknown) => void,
 ): Promise<void> {
     await page.route("**/api/session/**", async (route) => {
         const request = route.request();
 
-        if (request.method() === "PUT" && request.url().endsWith("/configuration")) {
-            onUpdate?.(request.postDataJSON());
-            await route.fulfill({ status: 204, body: "" });
+        if (request.method() === "POST" && request.url().endsWith("/link-token")) {
+            await route.fulfill({ json: onLinkToken ? onLinkToken() : session });
             return;
         }
 
-        if (request.method() === "POST" && request.url().endsWith("/link-token")) {
-            await route.fulfill({ json: onLinkToken ? onLinkToken() : session });
+        if (request.method() === "PUT" && request.url().endsWith("/permissions")) {
+            await route.fulfill({ json: session.config ?? defaultConfig });
             return;
         }
 

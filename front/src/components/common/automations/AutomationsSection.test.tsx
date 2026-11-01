@@ -5,10 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationsSection from "@/components/common/automations/AutomationsSection";
 import {
     createAutomation,
+    createSessionAutomation,
     deleteAutomation,
+    deleteSessionAutomation,
     fetchAutomationCatalog,
     fetchAutomations,
+    fetchSessionAutomationCatalog,
+    fetchSessionAutomations,
     updateAutomation,
+    updateSessionAutomation,
 } from "@/lib/http/automations";
 import type {
     AutomationCatalogSchema,
@@ -18,12 +23,19 @@ import type {
 
 vi.mock("@/lib/http/automations", () => ({
     createAutomation: vi.fn(),
+    createSessionAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
+    deleteSessionAutomation: vi.fn(),
     duplicateAutomation: vi.fn(),
+    duplicateSessionAutomation: vi.fn(),
     fetchAutomationCatalog: vi.fn(),
     fetchAutomations: vi.fn(),
+    fetchSessionAutomationCatalog: vi.fn(),
+    fetchSessionAutomations: vi.fn(),
     testAutomation: vi.fn(),
+    testSessionAutomation: vi.fn(),
     updateAutomation: vi.fn(),
+    updateSessionAutomation: vi.fn(),
 }));
 
 const fetchAutomationsMock = vi.mocked(fetchAutomations);
@@ -31,6 +43,11 @@ const fetchCatalogMock = vi.mocked(fetchAutomationCatalog);
 const createAutomationMock = vi.mocked(createAutomation);
 const updateAutomationMock = vi.mocked(updateAutomation);
 const deleteAutomationMock = vi.mocked(deleteAutomation);
+const fetchSessionAutomationsMock = vi.mocked(fetchSessionAutomations);
+const fetchSessionCatalogMock = vi.mocked(fetchSessionAutomationCatalog);
+const updateSessionAutomationMock = vi.mocked(updateSessionAutomation);
+const createSessionAutomationMock = vi.mocked(createSessionAutomation);
+const deleteSessionAutomationMock = vi.mocked(deleteSessionAutomation);
 
 function makeAutomation(overrides: Partial<AutomationSchema> = {}): AutomationSchema {
     return {
@@ -103,11 +120,21 @@ beforeEach(() => {
     createAutomationMock.mockReset();
     updateAutomationMock.mockReset();
     deleteAutomationMock.mockReset();
+    fetchSessionAutomationsMock.mockReset();
+    fetchSessionCatalogMock.mockReset();
+    updateSessionAutomationMock.mockReset();
+    createSessionAutomationMock.mockReset();
+    deleteSessionAutomationMock.mockReset();
     fetchAutomationsMock.mockResolvedValue(makeList());
     fetchCatalogMock.mockResolvedValue(catalog);
     createAutomationMock.mockResolvedValue(makeAutomation({ id: "auto-2" }));
     updateAutomationMock.mockResolvedValue(makeAutomation({ enabled: false }));
     deleteAutomationMock.mockResolvedValue(undefined);
+    fetchSessionAutomationsMock.mockResolvedValue(makeList());
+    fetchSessionCatalogMock.mockResolvedValue(catalog);
+    updateSessionAutomationMock.mockResolvedValue(makeAutomation({ enabled: false }));
+    createSessionAutomationMock.mockResolvedValue(makeAutomation({ id: "auto-2" }));
+    deleteSessionAutomationMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -129,6 +156,27 @@ describe("AutomationsSection", () => {
         await waitFor(() =>
             expect(updateAutomationMock).toHaveBeenCalledWith(
                 "config-token",
+                "auto-1",
+                { enabled: false },
+            ),
+        );
+    });
+
+    it("uses the session endpoints when rendered on the session page", async () => {
+        const user = userEvent.setup();
+        render(<AutomationsSection mainToken="main-token" />);
+
+        expect(await screen.findByText("Lock on freeze")).toBeInTheDocument();
+        expect(fetchSessionAutomationsMock).toHaveBeenCalledWith("main-token");
+        expect(fetchSessionCatalogMock).toHaveBeenCalledWith("main-token");
+
+        await user.click(
+            screen.getByRole("switch", { name: "Disable Lock on freeze" }),
+        );
+
+        await waitFor(() =>
+            expect(updateSessionAutomationMock).toHaveBeenCalledWith(
+                "main-token",
                 "auto-1",
                 { enabled: false },
             ),

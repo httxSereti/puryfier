@@ -6,9 +6,12 @@ from cuid2 import cuid_wrapper
 from domain.entities import (
     ChasterExtensionConfigSchema,
     ChasterExtensionSessionSchema,
+    ChasterSessionAuth,
     LockSession,
+    SessionPermissionsUpdateSchema,
 )
 from domain.errors import PermissionDeniedError, SessionNotFoundError
+from domain.permissions import effective_wearer_can_control
 from domain.ports import ChasterGateway, LockSessionRepository, PuryfiRegistry
 
 log = structlog.get_logger(__name__)
@@ -40,9 +43,32 @@ def _session_response(
         link_token=link_token,
         is_self_lock=is_self_lock,
         automation_mode=session.automation_mode,
+        effective_wearer_can_control=effective_wearer_can_control(session),
         config=session.config,
         lock_password=lock_password,
     )
+
+
+async def _fill_session_identity(
+    session: LockSession,
+    auth: ChasterSessionAuth,
+    sessions: LockSessionRepository,
+) -> None:
+    """Fill identities missing from a row first created by the config page."""
+    updates = {}
+    if session.keyholder_id is None and auth.keyholder_id is not None:
+        updates["keyholder_id"] = auth.keyholder_id
+    if session.wearer_id is None and auth.wearer_id is not None:
+        updates["wearer_id"] = auth.wearer_id
+    if session.lock_id is None and auth.lock_id is not None:
+        updates["lock_id"] = auth.lock_id
+
+    if not updates:
+        return
+
+    await sessions.update(session.session_id, **updates)
+    for key, value in updates.items():
+        setattr(session, key, value)
 
 
 async def open_session(
@@ -63,6 +89,7 @@ async def open_session(
         keyholder_id=auth.keyholder_id,
         wearer_id=auth.wearer_id,
     )
+    await _fill_session_identity(session, auth, sessions)
     return _session_response(
         session,
         auth.role,
@@ -71,48 +98,42 @@ async def open_session(
     )
 
 
-async def update_session_configuration(
+async def update_session_permissions(
     main_token: str,
-    payload: ChasterExtensionConfigSchema,
+    payload: SessionPermissionsUpdateSchema,
     *,
     chaster: ChasterGateway,
     sessions: LockSessionRepository,
     puryfi: PuryfiRegistry,
-) -> None:
-    """Persist the main-page settings for the current Chaster session.
+) -> ChasterExtensionConfigSchema:
+    """Update the non-legacy permissions shown on the session page.
 
-    The main page only receives a ``mainToken``, so the session is resolved
-    through Chaster's session-auth endpoint. The wearer may only edit the
-    settings of a self-lock; in a shared lock the keyholder keeps control.
+    Unlike the removed settings endpoint, this only accepts permission fields.
+    Legacy behaviour (freeze/media switches) can no longer be changed from the
+    main page. Permission rules mirror the configuration endpoint:
+    - only the keyholder may change the automation permission;
+    - a wearer may never grant themselves Puryfi control, and a self-lock
+      freezes its choice once the session exists.
     """
     auth = await chaster.get_session_auth(main_token)
-
-    is_self_lock = not auth.keyholder_id and bool(auth.wearer_id)
-    if auth.role != "keyholder" and not (auth.role == "wearer" and is_self_lock):
-        raise PermissionDeniedError(
-            "Only the keyholder can change the settings of this lock"
-        )
-
     session = await sessions.get_by_session_id(auth.session_id)
     if session is None:
         raise SessionNotFoundError("Session not found")
 
-    # Server-owned fields must never be overridden by a page payload.
-    managed_fields = {
-        "automations_snapshot": session.config.automations_snapshot,
-        "automations_snapshot_version": session.config.automations_snapshot_version,
-        "automations_snapshot_hash": session.config.automations_snapshot_hash,
-    }
-    if auth.role != "keyholder":
-        managed_fields["automation_permissions"] = (
-            session.config.automation_permissions
-        )
-    payload = payload.model_copy(update=managed_fields)
+    await _fill_session_identity(session, auth, sessions)
 
-    await chaster.update_session_configuration(auth.session_id, payload)
-    await sessions.update(auth.session_id, config=payload)
-    await puryfi.update_cached_config(session.link_token or "", payload)
-    log.info("configuration.session_updated", session_id=auth.session_id)
+    config = session.config.model_copy(deep=True)
+    is_self_lock = not auth.keyholder_id and bool(auth.wearer_id)
+    if auth.role == "keyholder":
+        config.automation_permissions = payload.automation_permissions
+        if not is_self_lock:
+            config.puryfi_permissions = payload.puryfi_permissions
+
+    await chaster.update_session_configuration(auth.session_id, config)
+    await sessions.update(auth.session_id, config=config)
+    await puryfi.update_cached_config(session.link_token or "", config)
+    log.info("configuration.permissions_updated", session_id=auth.session_id)
+    return config
 
 
 async def create_link_token(
@@ -133,6 +154,8 @@ async def create_link_token(
     if session is None:
         raise SessionNotFoundError("Session not found")
 
+    await _fill_session_identity(session, auth, sessions)
+
     if not session.link_token:
         token = cuid()
         await sessions.update(session.session_id, link_token=token)
@@ -148,6 +171,7 @@ async def create_link_token(
         link_token=session.link_token,
         is_self_lock=not auth.keyholder_id and bool(auth.wearer_id),
         automation_mode=session.automation_mode,
+        effective_wearer_can_control=effective_wearer_can_control(session),
         # lock_password deliberately omitted: the wearer must never receive
         # the cleartext password.
     )

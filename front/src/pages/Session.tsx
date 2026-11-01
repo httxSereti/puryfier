@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { LockKeyhole, Settings2 } from "lucide-react";
+import { House, LockKeyhole, Settings2, Sparkles } from "lucide-react";
 
+import AutomationsSection from "@/components/common/automations/AutomationsSection";
 import MotdCard from "@/components/common/cards/MotdCard";
 import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
@@ -21,10 +22,11 @@ import type {
     ChasterExtensionSessionSchema,
 } from "@/types/api";
 
-type SessionTab = "session" | "settings";
+type SessionTab = "home" | "automations" | "settings";
 
 const TABS = [
-    { value: "session", label: "Session", icon: <LockKeyhole /> },
+    { value: "home", label: "Home", icon: <House /> },
+    { value: "automations", label: "Automations", icon: <Sparkles /> },
     { value: "settings", label: "Settings", icon: <Settings2 /> },
 ];
 
@@ -37,7 +39,7 @@ export default function Session() {
         isLoading,
         reload,
     } = useSession(mainToken ?? null);
-    const [activeTab, setActiveTab] = useState<SessionTab>("session");
+    const [activeTab, setActiveTab] = useState<SessionTab>("home");
 
     // Subscribe only once the REST call has created the lock configuration:
     // opening the socket before that would race the session lookup.
@@ -50,13 +52,23 @@ export default function Session() {
     const hasPassword = Boolean(session?.lock_password && session.role === "keyholder");
 
     const handleConfigSaved = (config: ChasterExtensionConfigSchema) => {
-        setSessionData((current) => (current ? { ...current, config } : current));
+        setSessionData((current) =>
+            current
+                ? {
+                      ...current,
+                      config,
+                      effective_wearer_can_control:
+                          config.puryfi_permissions.wearer_can_control ??
+                          current.is_self_lock,
+                  }
+                : current,
+        );
     };
 
     return (
         <PageShell>
             <PageHeader
-                subtitle="Link Puryfi to this lock and manage its settings."
+                subtitle="Link Puryfi, manage automations and adjust lock permissions."
                 version={import.meta.env.VITE_APP_VERSION}
             >
                 {session ? (
@@ -97,15 +109,23 @@ export default function Session() {
                         items={TABS}
                         value={activeTab}
                         onChange={(value) => {
-                            if (value === "session" || value === "settings") {
+                            if (
+                                value === "home" ||
+                                value === "automations" ||
+                                value === "settings"
+                            ) {
                                 setActiveTab(value);
                             }
                         }}
                         ariaLabel="Extension sections"
                     />
 
-                    {activeTab === "session" ? (
-                        <div role="tabpanel" aria-label="Session" className="flex flex-col gap-5">
+                    {activeTab === "home" ? (
+                        <div
+                            role="tabpanel"
+                            aria-label="Home"
+                            className="flex flex-col gap-5"
+                        >
                             <div className={cn("grid gap-5", hasPassword && "lg:grid-cols-2")}>
                                 <PuryfiConnection session={session} liveStatus={realtimeStatus} />
 
@@ -120,14 +140,24 @@ export default function Session() {
                         </div>
                     ) : null}
 
-                    {mainToken ? (
-                        <div
-                            role="tabpanel"
-                            aria-label="Settings"
-                            hidden={activeTab !== "settings"}
-                        >
+                    {activeTab === "automations" && mainToken ? (
+                        <div role="tabpanel" aria-label="Automations">
+                            <AutomationsSection
+                                mainToken={mainToken}
+                                onChanged={() =>
+                                    setSessionData((current) =>
+                                        current
+                                            ? { ...current, automation_mode: true }
+                                            : current,
+                                    )
+                                }
+                            />
+                        </div>
+                    ) : null}
+
+                    {activeTab === "settings" && mainToken ? (
+                        <div role="tabpanel" aria-label="Settings">
                             <SessionSettings
-                                key={JSON.stringify(session.config)}
                                 session={session}
                                 mainToken={mainToken}
                                 onSaved={handleConfigSaved}
@@ -146,12 +176,12 @@ function EmptySession() {
     return (
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.07] bg-[#17151F]/90 px-4 py-14 text-center shadow-xl shadow-black/20">
             <div className="flex size-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-400">
-                <LockKeyhole className="size-5" />
+                <LockKeyhole />
             </div>
             <div>
                 <p className="text-sm font-semibold text-white">No session found</p>
                 <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                    Open this extension from a Chaster lock to link Puryfi and view its settings.
+                    Open this extension from a Chaster lock to link Puryfi and view its state.
                 </p>
             </div>
         </div>

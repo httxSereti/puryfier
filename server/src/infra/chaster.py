@@ -320,8 +320,8 @@ async def update_session_configuration(
 ) -> None:
     """Persist a running session's configuration in Chaster.
 
-    Used by the extension main page, which only receives a main page token and
-    therefore has no configuration token to call the configuration endpoint.
+    Used by server-owned flows (permissions and automation snapshots) that
+    only have the Chaster session id, not a configuration token.
     """
     response = await request_chaster(
         "PATCH",

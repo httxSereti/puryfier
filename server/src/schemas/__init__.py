@@ -6,6 +6,7 @@ from domain.entities import (
     ChasterExtensionConfigurationSchema,
     ChasterExtensionSessionSchema,
     PuryfiObjectLabel,
+    SessionPermissionsUpdateSchema,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "ChasterExtensionConfigurationSchema",
     "ChasterExtensionSessionSchema",
     "PuryfiObjectLabel",
+    "SessionPermissionsUpdateSchema",
 ]

@@ -5,6 +5,7 @@ import AutomationPermissionsCard from "@/components/common/automations/Automatio
 import AutomationsSection from "@/components/common/automations/AutomationsSection";
 import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
 import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
+import PuryfiControlPermissionCard from "@/components/common/configuration/PuryfiControlPermissionCard";
 import ConfigurationSkeleton from "@/components/common/configuration/ConfigurationSkeleton";
 import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
@@ -189,6 +190,14 @@ export default function Configuration() {
 
                     {liveConfigurationData.config ? (
                         <div className="flex flex-col gap-5">
+                            <PuryfiControlPermissionCard
+                                config={liveConfigurationData.config}
+                                role={liveConfigurationData.role}
+                                hasSession={liveConfigurationData.has_session}
+                                selfLock={liveConfigurationData.is_self_lock}
+                                onChange={handleConfigChange}
+                            />
+
                             {liveConfigurationData.has_session ? (
                                 <AutomationPermissionsCard
                                     config={liveConfigurationData.config}

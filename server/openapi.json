@@ -73,14 +73,14 @@
         }
       }
     },
-    "/api/session/{main_token}/configuration": {
+    "/api/session/{main_token}/permissions": {
       "put": {
         "tags": [
           "session"
         ],
-        "summary": "Update Session Configuration Endpoint",
-        "description": "Update the settings of the current session from the main page.",
-        "operationId": "update_session_configuration_endpoint_api_session__main_token__configuration_put",
+        "summary": "Update Session Permissions Endpoint",
+        "description": "Update the non-legacy permissions of the current session.",
+        "operationId": "update_session_permissions_endpoint_api_session__main_token__permissions_put",
         "parameters": [
           {
             "name": "main_token",
@@ -97,7 +97,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ChasterExtensionConfigSchema"
+                "$ref": "#/components/schemas/SessionPermissionsUpdateSchema"
               }
             }
           }
@@ -107,7 +107,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ChasterExtensionConfigSchema"
+                }
               }
             }
           },
@@ -418,6 +420,323 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AutomationListSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Create Session Automation",
+        "operationId": "create_session_automation_api_session__main_token__automations_post",
+        "parameters": [
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationCreateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{main_token}/automations/catalog": {
+      "get": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Session Automation Catalog",
+        "operationId": "session_automation_catalog_api_session__main_token__automations_catalog_get",
+        "parameters": [
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationCatalogSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{main_token}/automations/{automation_id}": {
+      "patch": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Update Session Automation",
+        "operationId": "update_session_automation_api_session__main_token__automations__automation_id__patch",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationUpdateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Delete Session Automation",
+        "operationId": "delete_session_automation_api_session__main_token__automations__automation_id__delete",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{main_token}/automations/{automation_id}/duplicate": {
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Duplicate Session Automation",
+        "operationId": "duplicate_session_automation_api_session__main_token__automations__automation_id__duplicate_post",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationDuplicateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{main_token}/automations/{automation_id}/test": {
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Test Session Automation",
+        "operationId": "test_session_automation_api_session__main_token__automations__automation_id__test_post",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationTestSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationTestResultSchema"
                 }
               }
             }
@@ -1672,6 +1991,9 @@
           "automation_permissions": {
             "$ref": "#/components/schemas/AutomationPermissionsSchema"
           },
+          "puryfi_permissions": {
+            "$ref": "#/components/schemas/PuryfiPermissionsSchema"
+          },
           "automations_snapshot": {
             "items": {
               "additionalProperties": true,
@@ -1869,6 +2191,11 @@
             "title": "Automation Mode",
             "default": false
           },
+          "effective_wearer_can_control": {
+            "type": "boolean",
+            "title": "Effective Wearer Can Control",
+            "default": false
+          },
           "config": {
             "anyOf": [
               {
@@ -1911,6 +2238,23 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "PuryfiPermissionsSchema": {
+        "properties": {
+          "wearer_can_control": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wearer Can Control"
+          }
+        },
+        "type": "object",
+        "title": "PuryfiPermissionsSchema"
+      },
       "PuryfiSupportTierSchema": {
         "properties": {
           "level": {
@@ -1938,6 +2282,22 @@
         },
         "type": "object",
         "title": "PuryfiSupportTierSchema"
+      },
+      "SessionPermissionsUpdateSchema": {
+        "properties": {
+          "automation_permissions": {
+            "$ref": "#/components/schemas/AutomationPermissionsSchema"
+          },
+          "puryfi_permissions": {
+            "$ref": "#/components/schemas/PuryfiPermissionsSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "automation_permissions",
+          "puryfi_permissions"
+        ],
+        "title": "SessionPermissionsUpdateSchema"
       },
       "ValidationError": {
         "properties": {

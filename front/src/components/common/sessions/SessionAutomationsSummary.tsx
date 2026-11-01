@@ -85,7 +85,7 @@ export default function SessionAutomationsSummary({
                         </ul>
                     ) : (
                         <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-4 text-center text-xs text-slate-500">
-                            No active automations. The wearer can create them from the extension configuration page.
+                            No active automations. Create one from the Automations tab.
                         </p>
                     )}
 

@@ -193,6 +193,145 @@ async def list_session_automations(
         raise _translate_error(exc) from exc
 
 
+@router.get(
+    "/session/{main_token}/automations/catalog",
+    response_model=AutomationCatalogSchema,
+)
+async def session_automation_catalog(
+    _: AutomationContext = Depends(get_session_context),
+):
+    return automation_catalog()
+
+
+@router.post(
+    "/session/{main_token}/automations",
+    response_model=AutomationSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_session_automation(
+    payload: AutomationCreateSchema,
+    context: AutomationContext = Depends(get_session_context),
+    container: Container = Depends(get_container),
+    puryfi: PuryfiRegistry = Depends(get_puryfi_registry),
+):
+    try:
+        return await create_automation(
+            context.session,
+            role=context.role,
+            payload=payload,
+            automations=container.automation_repository,
+            sessions=container.session_repository,
+            chaster=container.chaster_gateway,
+            puryfi=puryfi,
+            engine=container.automation_engine,
+        )
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.patch(
+    "/session/{main_token}/automations/{automation_id}",
+    response_model=AutomationSchema,
+)
+async def update_session_automation(
+    automation_id: str,
+    payload: AutomationUpdateSchema,
+    context: AutomationContext = Depends(get_session_context),
+    container: Container = Depends(get_container),
+    puryfi: PuryfiRegistry = Depends(get_puryfi_registry),
+):
+    try:
+        return await update_automation(
+            context.session,
+            role=context.role,
+            automation_id=automation_id,
+            payload=payload,
+            automations=container.automation_repository,
+            sessions=container.session_repository,
+            chaster=container.chaster_gateway,
+            puryfi=puryfi,
+            engine=container.automation_engine,
+        )
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.delete(
+    "/session/{main_token}/automations/{automation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_session_automation(
+    automation_id: str,
+    context: AutomationContext = Depends(get_session_context),
+    container: Container = Depends(get_container),
+    puryfi: PuryfiRegistry = Depends(get_puryfi_registry),
+):
+    try:
+        await delete_automation(
+            context.session,
+            role=context.role,
+            automation_id=automation_id,
+            automations=container.automation_repository,
+            sessions=container.session_repository,
+            chaster=container.chaster_gateway,
+            puryfi=puryfi,
+            engine=container.automation_engine,
+        )
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/session/{main_token}/automations/{automation_id}/duplicate",
+    response_model=AutomationSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def duplicate_session_automation(
+    automation_id: str,
+    payload: AutomationDuplicateSchema,
+    context: AutomationContext = Depends(get_session_context),
+    container: Container = Depends(get_container),
+    puryfi: PuryfiRegistry = Depends(get_puryfi_registry),
+):
+    try:
+        return await duplicate_automation(
+            context.session,
+            role=context.role,
+            automation_id=automation_id,
+            target_session_id=payload.target_session_id,
+            name=payload.name,
+            automations=container.automation_repository,
+            sessions=container.session_repository,
+            puryfi=puryfi,
+            engine=container.automation_engine,
+        )
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/session/{main_token}/automations/{automation_id}/test",
+    response_model=AutomationTestResultSchema,
+)
+async def test_session_automation(
+    automation_id: str,
+    payload: AutomationTestSchema,
+    context: AutomationContext = Depends(get_session_context),
+    container: Container = Depends(get_container),
+):
+    try:
+        return await test_automation(
+            context.session,
+            role=context.role,
+            automation_id=automation_id,
+            event=payload.event,
+            automations=container.automation_repository,
+            engine=container.automation_engine,
+        )
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
 @router.post(
     "/configuration/{configuration_token}/automations",
     response_model=AutomationSchema,

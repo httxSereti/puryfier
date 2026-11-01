@@ -251,8 +251,15 @@ The extension configuration page exposes an **Automations** editor:
 Legacy switches (`lock_on_freeze`, `unlock_on_unfreeze`, `censorPicsConfig`) remain available until the
 lock is converted with **Convert to automations**.
 
-The extension main page has a **Settings** tab as well. Keyholders (and wearers of self-locks) can
-update the legacy settings there; changes are saved to the running session immediately.
+The extension configuration page also exposes a **Puryfi control** permission
+(`wearer_can_control`). A self-lock creator chooses whether the wearer may control Puryfi; the
+choice is locked once the lock starts. For shared locks the keyholder can change it, and the
+wearer cannot.
+
+The extension main page has three tabs: **Home** (live connection and automation summary),
+**Automations** (full rule list, editing and recent activity), and **Settings** (non-legacy
+permissions such as `wearer_can_control` and `wearer_can_manage`). Legacy freeze and media
+switches stay on the extension configuration page.
 
 See [`docs/AUTOMATIONS.md`](docs/AUTOMATIONS.md) for the rule schema, API, permissions and execution details.
 
