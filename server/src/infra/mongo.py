@@ -3,7 +3,14 @@ from pymongo import AsyncMongoClient
 from pymongo.uri_parser import parse_uri
 
 from config import Settings, get_settings
-from infra.documents import QueuedMessage, UserLockConfiguration, WebhookInboxEntry
+from infra.documents import (
+    Automation,
+    AutomationExecution,
+    MediaCounter,
+    QueuedMessage,
+    UserLockConfiguration,
+    WebhookInboxEntry,
+)
 from infra.logging import get_logger
 
 log = get_logger(__name__)
@@ -33,7 +40,14 @@ async def init_db(settings: Settings | None = None) -> None:
 
     await init_beanie(
         database=_client[db_name],
-        document_models=[UserLockConfiguration, QueuedMessage, WebhookInboxEntry],
+        document_models=[
+            UserLockConfiguration,
+            QueuedMessage,
+            WebhookInboxEntry,
+            Automation,
+            MediaCounter,
+            AutomationExecution,
+        ],
     )
     log.info("db.ready", database=db_name)
 

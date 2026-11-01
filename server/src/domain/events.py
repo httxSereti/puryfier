@@ -97,9 +97,9 @@ def build_event_key(data: dict) -> str | None:
         if updated_at is not None:
             return f"{event}:{session_id}:{updated_at}"
 
-        # Deleted is terminal and may not carry updatedAt; the session id is
-        # still a stable business key.
-        if event == "extension_session.deleted":
+        # Created and deleted are terminal/one-shot events and may not carry
+        # updatedAt; the session id is still a stable business key.
+        if event in {"extension_session.created", "extension_session.deleted"}:
             return f"{event}:{session_id}"
 
         return None

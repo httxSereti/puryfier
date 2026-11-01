@@ -17,6 +17,10 @@ VALID_CONFIG = {
         "added_duration": 300,
         "enabled": True,
     },
+    "automation_permissions": {"wearer_can_manage": False},
+    "automations_snapshot": [],
+    "automations_snapshot_version": 0,
+    "automations_snapshot_hash": None,
 }
 
 
@@ -32,13 +36,41 @@ class TestConfigurationValidation:
         )
 
         assert response.status_code == 200
-        assert len(calls) == 1
-        assert json.loads(calls[0].content) == {"config": VALID_CONFIG}
+        assert len(calls) == 2
+        assert calls[0].method == "GET"
+        assert calls[1].method == "PUT"
+        assert json.loads(calls[1].content) == {"config": VALID_CONFIG}
         stored = mongo_db["users_lock_configurations"].find_one(
             {"session_id": SESSION_ID}
         )
         assert stored is not None
         assert stored["config"] == VALID_CONFIG
+
+    def test_wearer_cannot_grant_automation_permission(
+        self, client, seed_lock_configuration, mock_chaster_api, mongo_db
+    ):
+        seed_lock_configuration(
+            session_id=SESSION_ID,
+            link_token="token-1",
+            keyholder_id="keyholder-1",
+        )
+        mock_chaster_api(
+            make_configuration_response(role="wearer", session_id=SESSION_ID)
+        )
+
+        payload = {
+            **VALID_CONFIG,
+            "automation_permissions": {"wearer_can_manage": True},
+        }
+        response = client.put("/api/configuration/config-token", json=payload)
+
+        assert response.status_code == 200
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": SESSION_ID}
+        )
+        assert stored["config"]["automation_permissions"] == {
+            "wearer_can_manage": False
+        }
 
     def test_local_config_uses_validated_payload_when_chaster_omits_it(
         self, client, seed_lock_configuration, mock_chaster_api, mongo_db

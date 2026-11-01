@@ -95,10 +95,478 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/configuration/{configuration_token}/automations/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog */
+        get: operations["catalog_api_configuration__configuration_token__automations_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/{configuration_token}/automations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Configuration Automations */
+        get: operations["list_configuration_automations_api_configuration__configuration_token__automations_get"];
+        put?: never;
+        /** Create Configuration Automation */
+        post: operations["create_configuration_automation_api_configuration__configuration_token__automations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/session/{main_token}/automations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Session Automations */
+        get: operations["list_session_automations_api_session__main_token__automations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/{configuration_token}/automations/{automation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Configuration Automation */
+        delete: operations["delete_configuration_automation_api_configuration__configuration_token__automations__automation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Configuration Automation */
+        patch: operations["update_configuration_automation_api_configuration__configuration_token__automations__automation_id__patch"];
+        trace?: never;
+    };
+    "/api/configuration/{configuration_token}/automations/{automation_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Duplicate Configuration Automation */
+        post: operations["duplicate_configuration_automation_api_configuration__configuration_token__automations__automation_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/{configuration_token}/automations/{automation_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Configuration Automation */
+        post: operations["test_configuration_automation_api_configuration__configuration_token__automations__automation_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/{configuration_token}/automations/migrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Migrate Configuration Automations */
+        post: operations["migrate_configuration_automations_api_configuration__configuration_token__automations_migrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AutomationActionCatalogSchema */
+        AutomationActionCatalogSchema: {
+            /** Type */
+            type: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Params */
+            params?: components["schemas"]["AutomationActionParamCatalogSchema"][];
+        };
+        /** AutomationActionParamCatalogSchema */
+        AutomationActionParamCatalogSchema: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "number" | "text" | "boolean" | "json";
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /** Default */
+            default?: unknown;
+            /** Min */
+            min?: number | null;
+            /** Max */
+            max?: number | null;
+            /** Help */
+            help?: string | null;
+        };
+        /** AutomationActionSchema */
+        AutomationActionSchema: {
+            /** Type */
+            type: string;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+            /**
+             * On Failure
+             * @default stop
+             * @enum {string}
+             */
+            on_failure: "stop" | "continue";
+        };
+        /** AutomationCatalogSchema */
+        AutomationCatalogSchema: {
+            /** Events */
+            events: components["schemas"]["AutomationEventCatalogSchema"][];
+            /** Actions */
+            actions: components["schemas"]["AutomationActionCatalogSchema"][];
+            /** Labels */
+            labels: components["schemas"]["AutomationLabelCatalogSchema"][];
+        };
+        /**
+         * AutomationConditionSchema
+         * @description One condition evaluated against a normalized event payload.
+         */
+        AutomationConditionSchema: {
+            /** Field */
+            field: string;
+            /** Op */
+            op: string;
+            /** Value */
+            value?: unknown;
+        };
+        /** AutomationCreateSchema */
+        AutomationCreateSchema: {
+            /** Name */
+            name: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            trigger: components["schemas"]["AutomationTriggerSchema"];
+            /** Actions */
+            actions: components["schemas"]["AutomationActionSchema"][];
+            limits?: components["schemas"]["AutomationLimitsSchema"];
+        };
+        /** AutomationDuplicateSchema */
+        AutomationDuplicateSchema: {
+            /** Target Session Id */
+            target_session_id: string;
+            /** Name */
+            name?: string | null;
+        };
+        /** AutomationEventCatalogSchema */
+        AutomationEventCatalogSchema: {
+            /** Type */
+            type: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /**
+             * Supports Count
+             * @default false
+             */
+            supports_count: boolean;
+        };
+        /** AutomationExecutionSchema */
+        AutomationExecutionSchema: {
+            /** Id */
+            id: string;
+            /** Session Id */
+            session_id: string;
+            /** Automation Id */
+            automation_id: string;
+            /** Automation Name */
+            automation_name?: string | null;
+            /** Event Id */
+            event_id: string;
+            /** Event Type */
+            event_type: string;
+            /** Status */
+            status: string;
+            /** Actions */
+            actions?: {
+                [key: string]: unknown;
+            }[];
+            /** Error */
+            error?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /** AutomationLabelCatalogSchema */
+        AutomationLabelCatalogSchema: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
+            /**
+             * Censorable
+             * @default false
+             */
+            censorable: boolean;
+        };
+        /** AutomationLimitsSchema */
+        AutomationLimitsSchema: {
+            /**
+             * Cooldown Seconds
+             * @default 0
+             */
+            cooldown_seconds: number;
+            /**
+             * Max Per Day
+             * @default 0
+             */
+            max_per_day: number;
+        };
+        /** AutomationListSchema */
+        AutomationListSchema: {
+            /** Session Id */
+            session_id?: string | null;
+            /** Role */
+            role: string;
+            /** Owner Id */
+            owner_id?: string | null;
+            /**
+             * Automation Mode
+             * @default false
+             */
+            automation_mode: boolean;
+            /**
+             * Wearer Can Manage
+             * @default false
+             */
+            wearer_can_manage: boolean;
+            /**
+             * Effective Wearer Can Manage
+             * @default false
+             */
+            effective_wearer_can_manage: boolean;
+            /** Automations */
+            automations?: components["schemas"]["AutomationSchema"][];
+            /** Archived Automations */
+            archived_automations?: components["schemas"]["AutomationSchema"][];
+            /** Targets */
+            targets?: components["schemas"]["AutomationTargetSchema"][];
+            /** Executions */
+            executions?: components["schemas"]["AutomationExecutionSchema"][];
+        };
+        /** AutomationPermissionsSchema */
+        AutomationPermissionsSchema: {
+            /**
+             * Wearer Can Manage
+             * @default false
+             */
+            wearer_can_manage: boolean;
+        };
+        /** AutomationSchema */
+        AutomationSchema: {
+            /** Id */
+            id: string;
+            /** Session Id */
+            session_id: string;
+            /** Lock Id */
+            lock_id?: string | null;
+            /** Lock Label */
+            lock_label?: string | null;
+            /** Owner Id */
+            owner_id: string;
+            /** Owner Role */
+            owner_role: string;
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            trigger: components["schemas"]["AutomationTriggerSchema"];
+            /** Actions */
+            actions: components["schemas"]["AutomationActionSchema"][];
+            limits: components["schemas"]["AutomationLimitsSchema"];
+            /** Source Automation Id */
+            source_automation_id?: string | null;
+            /** Disabled By */
+            disabled_by?: string | null;
+            /** Disabled By Role */
+            disabled_by_role?: string | null;
+            /** Disabled At */
+            disabled_at?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+            /**
+             * Is Owner
+             * @default false
+             */
+            is_owner: boolean;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
+            /**
+             * Can Delete
+             * @default false
+             */
+            can_delete: boolean;
+            /**
+             * Can Disable
+             * @default false
+             */
+            can_disable: boolean;
+        };
+        /** AutomationTargetSchema */
+        AutomationTargetSchema: {
+            /** Session Id */
+            session_id: string;
+            /** Lock Id */
+            lock_id?: string | null;
+            /** Lock Label */
+            lock_label?: string | null;
+            /** Role */
+            role: string;
+        };
+        /** AutomationTestResultSchema */
+        AutomationTestResultSchema: {
+            /** Matched */
+            matched: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Actions */
+            actions?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** AutomationTestSchema */
+        AutomationTestSchema: {
+            /** Event */
+            event: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** AutomationTriggerSchema */
+        AutomationTriggerSchema: {
+            /** Event */
+            event: string;
+            /** Conditions */
+            conditions?: components["schemas"]["AutomationConditionSchema"][];
+            /**
+             * Min Score
+             * @default 0.5
+             */
+            min_score: number;
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /**
+             * Window Seconds
+             * @default 0
+             */
+            window_seconds: number;
+            /**
+             * Count Mode
+             * @default images
+             * @enum {string}
+             */
+            count_mode: "images" | "objects";
+        };
+        /**
+         * AutomationUpdateSchema
+         * @description Partial update. A non-owner keyholder may only change ``enabled``.
+         */
+        AutomationUpdateSchema: {
+            /** Name */
+            name: string | null;
+            /** Enabled */
+            enabled: boolean | null;
+            /** Priority */
+            priority: number | null;
+            trigger: components["schemas"]["AutomationTriggerSchema"] | null;
+            /** Actions */
+            actions: components["schemas"]["AutomationActionSchema"][] | null;
+            limits: components["schemas"]["AutomationLimitsSchema"] | null;
+        };
         /** CensorPicsConfigSchema */
         CensorPicsConfigSchema: {
             /**
@@ -130,6 +598,18 @@ export interface components {
              */
             unlock_on_unfreeze: boolean;
             censorPicsConfig: components["schemas"]["CensorPicsConfigSchema"];
+            automation_permissions: components["schemas"]["AutomationPermissionsSchema"];
+            /** Automations Snapshot */
+            automations_snapshot: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Automations Snapshot Version
+             * @default 0
+             */
+            automations_snapshot_version: number;
+            /** Automations Snapshot Hash */
+            automations_snapshot_hash: string | null;
         };
         /** ChasterExtensionConfigurationSchema */
         ChasterExtensionConfigurationSchema: {
@@ -159,6 +639,16 @@ export interface components {
              * @default false
              */
             has_session: boolean;
+            /**
+             * Is Self Lock
+             * @default false
+             */
+            is_self_lock: boolean;
+            /**
+             * Automation Mode
+             * @default false
+             */
+            automation_mode: boolean;
             config?: components["schemas"]["ChasterExtensionConfigSchema"] | null;
         };
         /** ChasterExtensionSessionSchema */
@@ -184,6 +674,16 @@ export interface components {
             puryfi_support_tier?: components["schemas"]["PuryfiSupportTierSchema"] | null;
             /** Link Token */
             link_token?: string | null;
+            /**
+             * Is Self Lock
+             * @default false
+             */
+            is_self_lock: boolean;
+            /**
+             * Automation Mode
+             * @default false
+             */
+            automation_mode: boolean;
             config?: components["schemas"]["ChasterExtensionConfigSchema"] | null;
             /** Lock Password */
             lock_password?: string | null;
@@ -357,6 +857,303 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_api_configuration__configuration_token__automations_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationCatalogSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_automations_api_configuration__configuration_token__automations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationListSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_configuration_automation_api_configuration__configuration_token__automations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationCreateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_session_automations_api_session__main_token__automations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationListSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_automation_api_configuration__configuration_token__automations__automation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_configuration_automation_api_configuration__configuration_token__automations__automation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationUpdateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_configuration_automation_api_configuration__configuration_token__automations__automation_id__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationDuplicateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_configuration_automation_api_configuration__configuration_token__automations__automation_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationTestSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationTestResultSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    migrate_configuration_automations_api_configuration__configuration_token__automations_migrate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                configuration_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationSchema"][];
                 };
             };
             /** @description Validation Error */

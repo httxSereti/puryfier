@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket
 
+from domain.automations.engine import AutomationEngine
 from domain.entities import (
     ChasterExtensionConfigSchema,
     LockSession,
@@ -78,6 +79,7 @@ class Connection:
         sessions: LockSessionRepository | None = None,
         queue: MessageQueue | None = None,
         media_scans: MediaScanSink | None = None,
+        automation_engine: AutomationEngine | None = None,
     ):
         self.websocket = websocket
         self.session: LockSession = user_lock_config
@@ -112,6 +114,7 @@ class Connection:
         # A process-wide batcher is injected by the composition root. Direct
         # unit tests that do not care about media scans may omit it.
         self._media_scans = media_scans
+        self._automation_engine = automation_engine
         self._status_publisher: StatusPublisher | None = None
 
         # One ordered mailbox per connection: every outbound command is queued
@@ -422,12 +425,28 @@ class Connection:
         elif msg_type == "staticMediaScan":
             # Never do I/O here: PuryFi can emit dozens of scans per second and
             # this read loop also receives the responses of pending RPCs. The
-            # batcher only increments an in-memory counter.
-            if self._media_scans is not None:
+            # automation engine and the legacy batcher only update in-memory
+            # counters.
+            objects = payload.get("objects", [])
+            handled = False
+            if self._automation_engine is not None:
+                try:
+                    handled = self._automation_engine.record_nowait(
+                        self.session,
+                        objects,
+                    )
+                except Exception:
+                    log.exception(
+                        "connection.automation_scan_failed",
+                        session_id=getattr(self.session, "session_id", None),
+                    )
+                    handled = bool(self.session.automation_mode)
+
+            if not handled and self._media_scans is not None:
                 try:
                     self._media_scans.record_nowait(
                         self.session,
-                        payload.get("objects", []),
+                        objects,
                     )
                 except Exception:
                     log.exception(

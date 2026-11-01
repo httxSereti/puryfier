@@ -46,6 +46,7 @@ def _to_entity(document: dict[str, Any] | UserLockConfiguration) -> LockSession:
         puryfi_support_tier=support_tier,
         seen_censored_objects=int(raw.get("seen_censored_objects", 0) or 0),
         lock_password=raw.get("lock_password"),
+        automation_mode=bool(raw.get("automation_mode", False)),
         config=config,
     )
 
@@ -95,6 +96,13 @@ class MongoLockSessionRepository:
     async def get_by_link_token(self, link_token: str) -> LockSession | None:
         document = await self._collection.find_one({"link_token": link_token})
         return _to_entity(document) if document is not None else None
+
+    async def list_for_owner(
+        self, owner_id: str, role: str
+    ) -> list[LockSession]:
+        field = "keyholder_id" if role == "keyholder" else "wearer_id"
+        documents = await self._collection.find({field: owner_id}).to_list()
+        return [_to_entity(document) for document in documents]
 
     async def update(self, session_id: str, **fields: Any) -> bool:
         if not fields:

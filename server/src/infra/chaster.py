@@ -209,17 +209,27 @@ async def create_custom_log(
 
 async def add_time_to_lock(session_id: str, duration: int) -> bool:
     """Add ``duration`` seconds to a Chaster lock."""
+    return await _change_time(session_id, duration, "add_time")
+
+
+async def remove_time_from_lock(session_id: str, duration: int) -> bool:
+    """Remove ``duration`` seconds from a Chaster lock."""
+    return await _change_time(session_id, duration, "remove_time")
+
+
+async def _change_time(session_id: str, duration: int, action: str) -> bool:
     try:
         response = await request_chaster(
             "POST",
             f"/api/extensions/sessions/{session_id}/action",
-            json={"action": {"name": "add_time", "params": duration}},
+            json={"action": {"name": action, "params": duration}},
         )
         return response.status_code == 201
     except httpx.HTTPError:
         log.warning(
-            "chaster.add_time_failed",
+            "chaster.time_action_failed",
             chaster_session_id=session_id,
+            chaster_action=action,
             duration=duration,
             exc_info=True,
         )
@@ -310,6 +320,9 @@ class ChasterService:
 
     async def add_time(self, session_id: str, duration: int) -> bool:
         return await add_time_to_lock(session_id, duration)
+
+    async def remove_time(self, session_id: str, duration: int) -> bool:
+        return await remove_time_from_lock(session_id, duration)
 
     async def create_log(
         self,

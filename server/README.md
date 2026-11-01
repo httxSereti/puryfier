@@ -52,7 +52,7 @@ interpolating it into the event string.
 
 ## Code layout
 
-The backend follows a layered layout (see `ARCHITECTURE_REVIEW.md`):
+The backend follows a layered layout (see `../docs/ARCHITECTURE_REVIEW.md`):
 
 | Directory   | Responsibility                                                        |
 | ----------- | --------------------------------------------------------------------- |

@@ -64,6 +64,14 @@ class PuryfiSupportTierSchema(BaseModel):
     name: str | None = None
 
 
+class AutomationPermissionsSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    # When true, the wearer may create and manage their own automations for
+    # this lock. The keyholder always manages their own rules.
+    wearer_can_manage: bool = False
+
+
 class ChasterExtensionConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -73,6 +81,16 @@ class ChasterExtensionConfigSchema(BaseModel):
     censorPicsConfig: CensorPicsConfigSchema = Field(
         default_factory=CensorPicsConfigSchema
     )
+
+    automation_permissions: AutomationPermissionsSchema = Field(
+        default_factory=AutomationPermissionsSchema
+    )
+
+    # Best-effort backup shown by the Chaster extension configuration page.
+    # MongoDB remains the source of truth for execution.
+    automations_snapshot: list[dict[str, Any]] = Field(default_factory=list)
+    automations_snapshot_version: int = 0
+    automations_snapshot_hash: str | None = None
 
 
 class ChasterExtensionConfigurationSchema(BaseModel):
@@ -91,6 +109,8 @@ class ChasterExtensionConfigurationSchema(BaseModel):
 
     # Chaster extension configuration
     has_session: bool = False
+    is_self_lock: bool = False
+    automation_mode: bool = False
     config: ChasterExtensionConfigSchema | None = None
 
 
@@ -111,6 +131,8 @@ class ChasterExtensionSessionSchema(BaseModel):
     link_token: str | None = None
 
     # Lock configuration
+    is_self_lock: bool = False
+    automation_mode: bool = False
     config: ChasterExtensionConfigSchema | None = None
 
     # Emergency Puryfi lock password.
@@ -134,6 +156,7 @@ class LockSession:
     puryfi_support_tier: PuryfiSupportTierSchema | None = None
     seen_censored_objects: int = 0
     lock_password: str | None = None
+    automation_mode: bool = False
 
 
 @dataclass(slots=True)

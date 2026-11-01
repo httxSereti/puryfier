@@ -215,6 +215,17 @@ async def websocket_endpoint(
 
     await websocket.accept()
 
+    # Preload automation rules so the synchronous media-scan hot path never
+    # needs a database lookup. A loading failure must not prevent PuryFi from
+    # connecting; automation_mode still keeps the legacy path disabled.
+    try:
+        await container.automation_engine.load_session(user_lock_config)
+    except Exception:
+        log.exception(
+            "ws.plugin.automation_preload_failed",
+            session_id=user_lock_config.session_id,
+        )
+
     # Connect the WebSocket actor with this application's adapters.
     connection = Connection(
         websocket,
@@ -222,6 +233,7 @@ async def websocket_endpoint(
         sessions=container.session_repository,
         queue=container.message_queue,
         media_scans=container.media_scan_batcher,
+        automation_engine=container.automation_engine,
     )
     await connection.start()
     registry = container.puryfi_registry

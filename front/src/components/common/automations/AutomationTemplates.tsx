@@ -1,0 +1,252 @@
+import { Eye, Gift, Image, LogIn, LogOut, Snowflake, Unlock } from "lucide-react";
+
+import type { AutomationCreateSchema } from "@/types/api";
+
+interface Template {
+    id: string;
+    label: string;
+    description: string;
+    icon: typeof Snowflake;
+    payload: AutomationCreateSchema;
+}
+
+const CENSORABLE_LABELS = [
+    "Buttocks",
+    "FemaleBreast",
+    "FemaleGenitals",
+    "MaleGenitals",
+    "Anus",
+    "Nipple",
+];
+
+const AUTOMATION_TEMPLATES: Template[] = [
+    {
+        id: "lock-on-join",
+        label: "Lock PuryFi on join",
+        description: "When the user joins the lock, lock PuryFi and enable it.",
+        icon: LogIn,
+        payload: {
+            name: "Lock PuryFi on join",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "chaster.session.joined",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "puryfi.lock", params: {}, on_failure: "stop" },
+                { type: "puryfi.enable", params: {}, on_failure: "stop" },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "unlock-on-leave",
+        label: "Unlock PuryFi on leave",
+        description: "When the user leaves the lock, unlock and disable PuryFi.",
+        icon: LogOut,
+        payload: {
+            name: "Unlock PuryFi on leave",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "chaster.session.left",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "puryfi.unlock", params: {}, on_failure: "stop" },
+                { type: "puryfi.disable", params: {}, on_failure: "stop" },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "lock-on-freeze",
+        label: "Lock PuryFi on freeze",
+        description: "When the Chaster lock is frozen, lock PuryFi and enable it.",
+        icon: Snowflake,
+        payload: {
+            name: "Lock PuryFi on freeze",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "chaster.lock.frozen",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "puryfi.lock", params: {}, on_failure: "stop" },
+                { type: "puryfi.enable", params: {}, on_failure: "stop" },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "unlock-on-unfreeze",
+        label: "Unlock PuryFi on unfreeze",
+        description: "When the Chaster lock is unfrozen, unlock and disable PuryFi.",
+        icon: Unlock,
+        payload: {
+            name: "Unlock PuryFi on unfreeze",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "chaster.lock.unfrozen",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "puryfi.unlock", params: {}, on_failure: "stop" },
+                { type: "puryfi.disable", params: {}, on_failure: "stop" },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "censored-media",
+        label: "Add time for censored media",
+        description: "Every 100 censorable images, add 10 minutes to the lock.",
+        icon: Image,
+        payload: {
+            name: "Add time for censored media",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.media.scan",
+                conditions: [
+                    {
+                        field: "labels",
+                        op: "contains_any",
+                        value: CENSORABLE_LABELS,
+                    },
+                ],
+                min_score: 0.5,
+                count: 100,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.add_time",
+                    params: { seconds: 600 },
+                    on_failure: "stop",
+                },
+            ],
+            limits: { cooldown_seconds: 5, max_per_day: 0 },
+        },
+    },
+    {
+        id: "eyes-and-belly",
+        label: "Eyes and Belly",
+        description: "When an image contains eyes and belly, add 2 minutes.",
+        icon: Eye,
+        payload: {
+            name: "Eyes and Belly",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.media.scan",
+                conditions: [
+                    {
+                        field: "labels",
+                        op: "contains_all",
+                        value: ["Eye", "Tummy"],
+                    },
+                ],
+                min_score: 0.5,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.add_time",
+                    params: { seconds: 120 },
+                    on_failure: "stop",
+                },
+            ],
+            limits: { cooldown_seconds: 300, max_per_day: 0 },
+        },
+    },
+    {
+        id: "eyes-and-belly-reward",
+        label: "Reward: Eyes and Belly",
+        description: "When an image contains eyes and belly, remove 2 minutes.",
+        icon: Gift,
+        payload: {
+            name: "Reward: Eyes and Belly",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.media.scan",
+                conditions: [
+                    {
+                        field: "labels",
+                        op: "contains_all",
+                        value: ["Eye", "Tummy"],
+                    },
+                ],
+                min_score: 0.5,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.remove_time",
+                    params: { seconds: 120 },
+                    on_failure: "stop",
+                },
+            ],
+            limits: { cooldown_seconds: 300, max_per_day: 0 },
+        },
+    },
+];
+
+export default function AutomationTemplates({
+    onSelect,
+}: {
+    onSelect: (payload: AutomationCreateSchema) => void;
+}) {
+    return (
+        <div className="grid gap-2 sm:grid-cols-2">
+            {AUTOMATION_TEMPLATES.map((template) => {
+                const Icon = template.icon;
+                return (
+                    <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => onSelect(template.payload)}
+                        className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition-colors hover:border-cyan-400/20 hover:bg-cyan-400/[0.04]"
+                    >
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[0.07] text-cyan-300">
+                            <Icon className="size-4" />
+                        </span>
+                        <span className="min-w-0">
+                            <span className="block text-xs font-semibold text-slate-200">
+                                {template.label}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] leading-relaxed text-slate-500">
+                                {template.description}
+                            </span>
+                        </span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}

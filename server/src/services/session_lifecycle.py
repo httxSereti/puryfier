@@ -1,5 +1,7 @@
 """Deprecated service facade. Use :mod:`domain.use_cases.session_lifecycle`."""
 
+import structlog
+
 from container import get_active_container
 from domain.use_cases.session_lifecycle import (
     SESSION_ENDED_CLOSE_CODE,
@@ -8,11 +10,17 @@ from domain.use_cases.session_lifecycle import (
     revoke_session as _revoke_session,
 )
 
+log = structlog.get_logger(__name__)
+
 __all__ = ["SESSION_ENDED_CLOSE_CODE", "revoke_session"]
 
 
 async def revoke_session(session_id: str) -> bool:
     container = get_active_container()
+    try:
+        await container.automation_engine.archive_session(session_id)
+    except Exception:
+        log.exception("automation.archive_failed", session_id=session_id)
     return await _revoke_session(
         session_id,
         sessions=container.session_repository,

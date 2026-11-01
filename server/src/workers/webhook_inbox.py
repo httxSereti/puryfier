@@ -178,10 +178,19 @@ class WebhookInboxWorker:
         # a handler at runtime.
         from workers.handlers import (
             handle_extension_session_deleted,
+            handle_extension_session_joined,
             handle_extension_updated,
             handle_lock_frozen,
             handle_lock_unfrozen,
         )
+
+        if entry.event == "extension_session.created":
+            result = await handle_extension_session_joined(entry.payload)
+            if isinstance(result, dict) and result.get("status") == "error":
+                raise RuntimeError(
+                    f"handler error: {result.get('error', 'unknown')}"
+                )
+            return
 
         if entry.event == "extension_session.deleted":
             result = await handle_extension_session_deleted(entry.payload)

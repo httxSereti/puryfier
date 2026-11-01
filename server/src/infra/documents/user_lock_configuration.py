@@ -35,6 +35,11 @@ class UserLockConfiguration(Document):
     # Persisted so reconnects/restarts do not lose progress.
     seen_censored_objects: int = 0
 
+    # Once true, the automation engine replaces the legacy hardcoded
+    # freeze/unfreeze/media-penalty behaviour for this session. It stays true
+    # even if the user later deletes every automation.
+    automation_mode: bool = False
+
     # Configurations
     # Conscious decision (REVIEW.md #13): lock_password is stored in cleartext
     # because it must be retrievable to send to the Puryfi client on

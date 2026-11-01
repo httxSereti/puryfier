@@ -10,9 +10,14 @@
 
 ## ✨ Key Features
 
+- 🧩 **Event-driven automations**: when an event happens, if conditions match, run one or more actions.
 - ❄️ Lock & Enable Puryfi when your lock is frozen.
 - 🔓 Unlock & Disable Puryfi when your lock is unfrozen.
-- 📸 Add time when media is censored by Puryfi.
+- 🚪 Unlock Puryfi when the user leaves the lock.
+- 📸 Add time when media is censored by Puryfi, with label, score, occurrence and cooldown controls.
+- 📋 Duplicate an automation into another lock; copies start disabled.
+- 🗄️ Archived automations are kept for 30 days after a lock ends.
+- 🟢 Live PuryFi connection, profile and state in the Chaster iframe.
 
 ## 🚀 Goals
 
@@ -230,6 +235,23 @@ docker compose up -d --build
 Traefik routes `/api` and `/ws` directly to the backend; the frontend is only used for all other paths.
 
 > Switching modes: run `docker compose down` first, change `COMPOSE_PROFILES` in `.env`, then `docker compose up -d --build`.
+
+### Automations
+
+The extension configuration page exposes an **Automations** editor:
+
+- a rule belongs to **one lock**;
+- it can be **duplicated** into another lock, but the copy is independent and starts disabled;
+- the keyholder manages rules by default;
+- a per-lock setting can allow the wearer to manage their own rules (enabled by default for self-locks);
+- the keyholder can disable any rule on the lock, but cannot edit or delete another creator's rule;
+- rules are stored in MongoDB and a snapshot is kept in the Chaster extension configuration;
+- when a lock ends, its rules are archived for 30 days.
+
+Legacy switches (`lock_on_freeze`, `unlock_on_unfreeze`, `censorPicsConfig`) remain available until the
+lock is converted with **Convert to automations**.
+
+See [`docs/AUTOMATIONS.md`](docs/AUTOMATIONS.md) for the rule schema, API, permissions and execution details.
 
 ### Common
 

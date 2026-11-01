@@ -37,6 +37,8 @@ def _session_response(
         puryfi_username=session.puryfi_username,
         puryfi_support_tier=session.puryfi_support_tier,
         link_token=link_token,
+        is_self_lock=not bool(session.keyholder_id) and bool(session.wearer_id),
+        automation_mode=session.automation_mode,
         config=session.config,
         lock_password=lock_password,
     )
@@ -94,6 +96,8 @@ async def create_link_token(
         puryfi_username=session.puryfi_username,
         puryfi_support_tier=session.puryfi_support_tier,
         link_token=session.link_token,
+        is_self_lock=not bool(session.keyholder_id) and bool(session.wearer_id),
+        automation_mode=session.automation_mode,
         # lock_password deliberately omitted: the wearer must never receive
         # the cleartext password.
     )

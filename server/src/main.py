@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import configuration, health, realtime, session, webhooks
+from api import automations, configuration, health, realtime, session, webhooks
 from config import Settings
 from container import build_container, set_active_container
 from infra.chaster import close_chaster_client, configure_chaster_client
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     set_active_container(container)
     await container.media_scan_batcher.start()
     await container.webhook_worker.start()
+    await container.automation_engine.start()
 
     log.info(
         "server.started",
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
     finally:
         # Flush pending media counters before the database and Chaster clients
         # are closed.
+        await container.automation_engine.stop()
         await container.media_scan_batcher.stop()
         await container.webhook_worker.stop()
         await close_db()
@@ -101,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(webhooks.router)
     app.include_router(session.router)
     app.include_router(configuration.router)
+    app.include_router(automations.router)
 
     install_access_log_redaction()
     return app

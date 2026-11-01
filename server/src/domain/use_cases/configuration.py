@@ -28,6 +28,7 @@ async def get_configuration(
             role=data.role,
             config=config,
             has_session=False,
+            automation_mode=False,
         )
 
     session = await sessions.get_or_create(data.session_id, config=config)
@@ -43,6 +44,8 @@ async def get_configuration(
         # Keep the token scoped to the wearer only.
         link_token=session.link_token if data.role == "wearer" else None,
         has_session=True,
+        is_self_lock=not bool(session.keyholder_id) and bool(session.wearer_id),
+        automation_mode=session.automation_mode,
         config=session.config,
     )
 
@@ -76,6 +79,18 @@ async def update_configuration(
         session_id=session_id,
         lock_config_id=session.id,
     )
+
+    # Rules are managed through the automation API. The snapshot is a
+    # best-effort backup and must never be overwritten by a stale form payload.
+    existing = session.config
+    payload = payload.model_copy(
+        update={
+            "automations_snapshot": existing.automations_snapshot,
+            "automations_snapshot_version": existing.automations_snapshot_version,
+            "automations_snapshot_hash": existing.automations_snapshot_hash,
+        }
+    )
+
     await sessions.update(session_id, config=payload)
     await puryfi.update_cached_config(session.link_token or "", payload)
     log.info("configuration.updated", session_id=session_id)

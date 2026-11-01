@@ -8,6 +8,21 @@ export type { components, operations, paths } from "@/types/api.generated";
  * Regenerate them with `pnpm generate:api` after changing a request or
  * response model; never edit `api.generated.ts` by hand.
  */
+export type AutomationActionCatalogSchema = components["schemas"]["AutomationActionCatalogSchema"];
+export type AutomationActionSchema = components["schemas"]["AutomationActionSchema"];
+export type AutomationCatalogSchema = components["schemas"]["AutomationCatalogSchema"];
+export type AutomationConditionSchema = components["schemas"]["AutomationConditionSchema"];
+export type AutomationCreateSchema = components["schemas"]["AutomationCreateSchema"];
+export type AutomationExecutionSchema = components["schemas"]["AutomationExecutionSchema"];
+export type AutomationLabelCatalogSchema = components["schemas"]["AutomationLabelCatalogSchema"];
+export type AutomationLimitsSchema = components["schemas"]["AutomationLimitsSchema"];
+export type AutomationListSchema = components["schemas"]["AutomationListSchema"];
+export type AutomationPermissionsSchema = components["schemas"]["AutomationPermissionsSchema"];
+export type AutomationSchema = components["schemas"]["AutomationSchema"];
+export type AutomationTargetSchema = components["schemas"]["AutomationTargetSchema"];
+export type AutomationTestResultSchema = components["schemas"]["AutomationTestResultSchema"];
+export type AutomationTriggerSchema = components["schemas"]["AutomationTriggerSchema"];
+export type AutomationUpdateSchema = components["schemas"]["AutomationUpdateSchema"];
 export type CensorPicsConfigSchema = components["schemas"]["CensorPicsConfigSchema"];
 export type ChasterExtensionConfigSchema = components["schemas"]["ChasterExtensionConfigSchema"];
 export type ChasterExtensionConfigurationSchema =

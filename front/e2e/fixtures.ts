@@ -8,6 +8,12 @@ export interface E2EConfig {
         limit_count: number;
         added_duration: number;
     };
+    automation_permissions: {
+        wearer_can_manage: boolean;
+    };
+    automations_snapshot: unknown[];
+    automations_snapshot_version: number;
+    automations_snapshot_hash: string | null;
 }
 
 export interface E2ESession {
@@ -17,6 +23,8 @@ export interface E2ESession {
     has_linked_plugin: boolean;
     puryfi_version?: string | null;
     link_token?: string | null;
+    is_self_lock?: boolean;
+    automation_mode?: boolean;
     config?: E2EConfig | null;
     lock_password?: string | null;
 }
@@ -29,6 +37,8 @@ export interface E2EConfiguration {
     puryfi_version?: string | null;
     link_token?: string | null;
     has_session: boolean;
+    is_self_lock?: boolean;
+    automation_mode?: boolean;
     config?: E2EConfig | null;
 }
 
@@ -40,6 +50,12 @@ export const defaultConfig: E2EConfig = {
         limit_count: 10,
         added_duration: 600,
     },
+    automation_permissions: {
+        wearer_can_manage: false,
+    },
+    automations_snapshot: [],
+    automations_snapshot_version: 0,
+    automations_snapshot_hash: null,
 };
 
 export function makeSession(overrides: Partial<E2ESession> = {}): E2ESession {
@@ -50,6 +66,8 @@ export function makeSession(overrides: Partial<E2ESession> = {}): E2ESession {
         has_linked_plugin: false,
         puryfi_version: null,
         link_token: null,
+        is_self_lock: false,
+        automation_mode: false,
         config: defaultConfig,
         lock_password: null,
         ...overrides,
@@ -67,6 +85,8 @@ export function makeConfiguration(
         puryfi_version: null,
         link_token: null,
         has_session: true,
+        is_self_lock: false,
+        automation_mode: false,
         config: defaultConfig,
         ...overrides,
     };

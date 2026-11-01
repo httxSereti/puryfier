@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Link2, LockKeyhole, Settings2, ShieldCheck, Unplug } from "lucide-react";
+import { Check, Link2, LockKeyhole, Settings2, ShieldCheck, Sparkles, Unplug } from "lucide-react";
 
+import AutomationPermissionsCard from "@/components/common/automations/AutomationPermissionsCard";
+import AutomationsSection from "@/components/common/automations/AutomationsSection";
 import GeneralConfigurationOptions from "@/components/common/configuration/GeneralConfigurationOptions";
 import CensoredMediaOptions from "@/components/common/configuration/CensoredMediaOptions";
 import ConfigurationSkeleton from "@/components/common/configuration/ConfigurationSkeleton";
@@ -8,9 +10,12 @@ import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
 import PuryfiProfile from "@/components/common/sessions/PuryfiProfile";
 import ErrorAlert from "@/components/ui/error-alert";
+import SectionCard from "@/components/ui/section-card";
 import StatusPill from "@/components/ui/status-pill";
+import { Button } from "@/components/ui/button";
 import { useConfiguration } from "@/hooks/useConfiguration";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
+import { migrateLegacyAutomations } from "@/lib/http/automations";
 import { updateConfiguration } from "@/lib/http/configuration";
 import { readChasterIframeParams } from "@/lib/chaster";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -40,6 +45,8 @@ export default function Configuration() {
         reload,
     } = useConfiguration(partnerConfigurationToken ?? null);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [migrationError, setMigrationError] = useState<string | null>(null);
+    const [isMigrating, setIsMigrating] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
 
     // Keep a mutable ref to the latest config so the message listener always
@@ -110,11 +117,38 @@ export default function Configuration() {
     }, [partnerConfigurationToken]);
 
     const handleConfigChange = (updatedConfig: ChasterExtensionConfigSchema) => {
-        setConfigurationData((current) => (current ? { ...current, config: updatedConfig } : current));
+        setConfigurationData((current) => {
+            if (!current) return current;
+            const next = { ...current, config: updatedConfig };
+            configRef.current = next;
+            return next;
+        });
         setIsDirty(true);
     };
 
-    const error = fetchError ?? saveError;
+    const handleMigrate = async () => {
+        if (!partnerConfigurationToken) return;
+
+        setIsMigrating(true);
+        setMigrationError(null);
+        try {
+            const currentConfig = configRef.current?.config;
+            if (currentConfig) {
+                await updateConfiguration(partnerConfigurationToken, currentConfig);
+            }
+            await migrateLegacyAutomations(partnerConfigurationToken);
+            setIsDirty(false);
+            await reload();
+        } catch (cause) {
+            setMigrationError(
+                getApiErrorMessage(cause, "Could not convert the legacy settings."),
+            );
+        } finally {
+            setIsMigrating(false);
+        }
+    };
+
+    const error = fetchError ?? saveError ?? migrationError;
 
     return (
         <PageShell className="max-w-3xl">
@@ -155,15 +189,57 @@ export default function Configuration() {
 
                     {liveConfigurationData.config ? (
                         <div className="flex flex-col gap-5">
-                            <GeneralConfigurationOptions
-                                config={liveConfigurationData.config}
-                                onChange={handleConfigChange}
-                            />
+                            {liveConfigurationData.has_session ? (
+                                <AutomationPermissionsCard
+                                    config={liveConfigurationData.config}
+                                    readOnly={
+                                        liveConfigurationData.role !== "keyholder" &&
+                                        !liveConfigurationData.is_self_lock
+                                    }
+                                    selfLock={liveConfigurationData.is_self_lock}
+                                    onChange={handleConfigChange}
+                                />
+                            ) : null}
 
-                            <CensoredMediaOptions
-                                config={liveConfigurationData.config}
-                                onChange={handleConfigChange}
-                            />
+                            {liveConfigurationData.automation_mode &&
+                            partnerConfigurationToken ? (
+                                <AutomationsSection
+                                    configurationToken={partnerConfigurationToken}
+                                />
+                            ) : (
+                                <>
+                                    {liveConfigurationData.has_session ? (
+                                        <SectionCard
+                                            icon={<Sparkles />}
+                                            title="Automations are off"
+                                            description="The switches below are the legacy settings. Convert them to automations to use the new rule builder."
+                                            accent="violet"
+                                        >
+                                            <Button
+                                                type="button"
+                                                onClick={handleMigrate}
+                                                disabled={isMigrating}
+                                                className="bg-violet-500 text-slate-950 hover:bg-violet-400"
+                                            >
+                                                <Sparkles />
+                                                {isMigrating
+                                                    ? "Converting…"
+                                                    : "Convert to automations"}
+                                            </Button>
+                                        </SectionCard>
+                                    ) : null}
+
+                                    <GeneralConfigurationOptions
+                                        config={liveConfigurationData.config}
+                                        onChange={handleConfigChange}
+                                    />
+
+                                    <CensoredMediaOptions
+                                        config={liveConfigurationData.config}
+                                        onChange={handleConfigChange}
+                                    />
+                                </>
+                            )}
                         </div>
                     ) : (
                         <EmptyConfiguration />
@@ -172,7 +248,9 @@ export default function Configuration() {
                     <footer className="flex flex-col gap-2 px-1 pt-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                         <span className="inline-flex items-center gap-1.5">
                             <ShieldCheck className="size-3.5" />
-                            Changes are saved to Chaster when you confirm.
+                            {liveConfigurationData.automation_mode
+                                ? "Automation changes are saved immediately."
+                                : "Changes are saved to Chaster when you confirm."}
                         </span>
 
                         {isDirty ? (

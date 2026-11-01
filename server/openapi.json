@@ -207,10 +207,1377 @@
           }
         }
       }
+    },
+    "/api/configuration/{configuration_token}/automations/catalog": {
+      "get": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Catalog",
+        "operationId": "catalog_api_configuration__configuration_token__automations_catalog_get",
+        "parameters": [
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationCatalogSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/{configuration_token}/automations": {
+      "get": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "List Configuration Automations",
+        "operationId": "list_configuration_automations_api_configuration__configuration_token__automations_get",
+        "parameters": [
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationListSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Create Configuration Automation",
+        "operationId": "create_configuration_automation_api_configuration__configuration_token__automations_post",
+        "parameters": [
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationCreateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{main_token}/automations": {
+      "get": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "List Session Automations",
+        "operationId": "list_session_automations_api_session__main_token__automations_get",
+        "parameters": [
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationListSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/{configuration_token}/automations/{automation_id}": {
+      "patch": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Update Configuration Automation",
+        "operationId": "update_configuration_automation_api_configuration__configuration_token__automations__automation_id__patch",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationUpdateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Delete Configuration Automation",
+        "operationId": "delete_configuration_automation_api_configuration__configuration_token__automations__automation_id__delete",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/{configuration_token}/automations/{automation_id}/duplicate": {
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Duplicate Configuration Automation",
+        "operationId": "duplicate_configuration_automation_api_configuration__configuration_token__automations__automation_id__duplicate_post",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationDuplicateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/{configuration_token}/automations/{automation_id}/test": {
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Test Configuration Automation",
+        "operationId": "test_configuration_automation_api_configuration__configuration_token__automations__automation_id__test_post",
+        "parameters": [
+          {
+            "name": "automation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Automation Id"
+            }
+          },
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationTestSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationTestResultSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/{configuration_token}/automations/migrate": {
+      "post": {
+        "tags": [
+          "automations"
+        ],
+        "summary": "Migrate Configuration Automations",
+        "operationId": "migrate_configuration_automations_api_configuration__configuration_token__automations_migrate_post",
+        "parameters": [
+          {
+            "name": "configuration_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Configuration Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AutomationSchema"
+                  },
+                  "title": "Response Migrate Configuration Automations Api Configuration  Configuration Token  Automations Migrate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AutomationActionCatalogSchema": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationActionParamCatalogSchema"
+            },
+            "type": "array",
+            "title": "Params"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "label",
+          "description"
+        ],
+        "title": "AutomationActionCatalogSchema"
+      },
+      "AutomationActionParamCatalogSchema": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "number",
+              "text",
+              "boolean",
+              "json"
+            ],
+            "title": "Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "default": {
+            "title": "Default"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "title": "AutomationActionParamCatalogSchema"
+      },
+      "AutomationActionSchema": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "on_failure": {
+            "type": "string",
+            "enum": [
+              "stop",
+              "continue"
+            ],
+            "title": "On Failure",
+            "default": "stop"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AutomationActionSchema"
+      },
+      "AutomationCatalogSchema": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationEventCatalogSchema"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationActionCatalogSchema"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "labels": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationLabelCatalogSchema"
+            },
+            "type": "array",
+            "title": "Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "actions",
+          "labels"
+        ],
+        "title": "AutomationCatalogSchema"
+      },
+      "AutomationConditionSchema": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "op": {
+            "type": "string",
+            "title": "Op"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field",
+          "op"
+        ],
+        "title": "AutomationConditionSchema",
+        "description": "One condition evaluated against a normalized event payload."
+      },
+      "AutomationCreateSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/AutomationTriggerSchema"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationActionSchema"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Actions"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AutomationLimitsSchema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "trigger",
+          "actions"
+        ],
+        "title": "AutomationCreateSchema"
+      },
+      "AutomationDuplicateSchema": {
+        "properties": {
+          "target_session_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Target Session Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target_session_id"
+        ],
+        "title": "AutomationDuplicateSchema"
+      },
+      "AutomationEventCatalogSchema": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "supports_count": {
+            "type": "boolean",
+            "title": "Supports Count",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "label",
+          "description"
+        ],
+        "title": "AutomationEventCatalogSchema"
+      },
+      "AutomationExecutionSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "automation_id": {
+            "type": "string",
+            "title": "Automation Id"
+          },
+          "automation_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Name"
+          },
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "automation_id",
+          "event_id",
+          "event_type",
+          "status"
+        ],
+        "title": "AutomationExecutionSchema"
+      },
+      "AutomationLabelCatalogSchema": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "censorable": {
+            "type": "boolean",
+            "title": "Censorable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "AutomationLabelCatalogSchema"
+      },
+      "AutomationLimitsSchema": {
+        "properties": {
+          "cooldown_seconds": {
+            "type": "integer",
+            "maximum": 604800.0,
+            "minimum": 0.0,
+            "title": "Cooldown Seconds",
+            "default": 0
+          },
+          "max_per_day": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Max Per Day",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AutomationLimitsSchema"
+      },
+      "AutomationListSchema": {
+        "properties": {
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "automation_mode": {
+            "type": "boolean",
+            "title": "Automation Mode",
+            "default": false
+          },
+          "wearer_can_manage": {
+            "type": "boolean",
+            "title": "Wearer Can Manage",
+            "default": false
+          },
+          "effective_wearer_can_manage": {
+            "type": "boolean",
+            "title": "Effective Wearer Can Manage",
+            "default": false
+          },
+          "automations": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationSchema"
+            },
+            "type": "array",
+            "title": "Automations"
+          },
+          "archived_automations": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationSchema"
+            },
+            "type": "array",
+            "title": "Archived Automations"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationTargetSchema"
+            },
+            "type": "array",
+            "title": "Targets"
+          },
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationExecutionSchema"
+            },
+            "type": "array",
+            "title": "Executions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "AutomationListSchema"
+      },
+      "AutomationPermissionsSchema": {
+        "properties": {
+          "wearer_can_manage": {
+            "type": "boolean",
+            "title": "Wearer Can Manage",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "AutomationPermissionsSchema"
+      },
+      "AutomationSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "lock_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Id"
+          },
+          "lock_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Label"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id"
+          },
+          "owner_role": {
+            "type": "string",
+            "title": "Owner Role"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 100
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/AutomationTriggerSchema"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationActionSchema"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AutomationLimitsSchema"
+          },
+          "source_automation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Automation Id"
+          },
+          "disabled_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled By"
+          },
+          "disabled_by_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled By Role"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "is_owner": {
+            "type": "boolean",
+            "title": "Is Owner",
+            "default": false
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit",
+            "default": false
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "default": false
+          },
+          "can_disable": {
+            "type": "boolean",
+            "title": "Can Disable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "owner_id",
+          "owner_role",
+          "name",
+          "trigger",
+          "actions",
+          "limits"
+        ],
+        "title": "AutomationSchema"
+      },
+      "AutomationTargetSchema": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "lock_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Id"
+          },
+          "lock_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Label"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "role"
+        ],
+        "title": "AutomationTargetSchema"
+      },
+      "AutomationTestResultSchema": {
+        "properties": {
+          "matched": {
+            "type": "boolean",
+            "title": "Matched"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matched"
+        ],
+        "title": "AutomationTestResultSchema"
+      },
+      "AutomationTestSchema": {
+        "properties": {
+          "event": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AutomationTestSchema"
+      },
+      "AutomationTriggerSchema": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "title": "Event"
+          },
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationConditionSchema"
+            },
+            "type": "array",
+            "title": "Conditions"
+          },
+          "min_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Score",
+            "default": 0.5
+          },
+          "count": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "default": 1
+          },
+          "window_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Window Seconds",
+            "default": 0
+          },
+          "count_mode": {
+            "type": "string",
+            "enum": [
+              "images",
+              "objects"
+            ],
+            "title": "Count Mode",
+            "default": "images"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "title": "AutomationTriggerSchema"
+      },
+      "AutomationUpdateSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutomationTriggerSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AutomationActionSchema"
+                },
+                "type": "array",
+                "maxItems": 10,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actions"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutomationLimitsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AutomationUpdateSchema",
+        "description": "Partial update. A non-owner keyholder may only change ``enabled``."
+      },
       "CensorPicsConfigSchema": {
         "properties": {
           "limit_count": {
@@ -250,6 +1617,33 @@
           },
           "censorPicsConfig": {
             "$ref": "#/components/schemas/CensorPicsConfigSchema"
+          },
+          "automation_permissions": {
+            "$ref": "#/components/schemas/AutomationPermissionsSchema"
+          },
+          "automations_snapshot": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Automations Snapshot"
+          },
+          "automations_snapshot_version": {
+            "type": "integer",
+            "title": "Automations Snapshot Version",
+            "default": 0
+          },
+          "automations_snapshot_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automations Snapshot Hash"
           }
         },
         "type": "object",
@@ -321,6 +1715,16 @@
           "has_session": {
             "type": "boolean",
             "title": "Has Session",
+            "default": false
+          },
+          "is_self_lock": {
+            "type": "boolean",
+            "title": "Is Self Lock",
+            "default": false
+          },
+          "automation_mode": {
+            "type": "boolean",
+            "title": "Automation Mode",
             "default": false
           },
           "config": {
@@ -403,6 +1807,16 @@
               }
             ],
             "title": "Link Token"
+          },
+          "is_self_lock": {
+            "type": "boolean",
+            "title": "Is Self Lock",
+            "default": false
+          },
+          "automation_mode": {
+            "type": "boolean",
+            "title": "Automation Mode",
+            "default": false
           },
           "config": {
             "anyOf": [

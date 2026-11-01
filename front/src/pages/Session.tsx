@@ -5,6 +5,7 @@ import MotdCard from "@/components/common/cards/MotdCard";
 import PageHeader from "@/components/common/layout/PageHeader";
 import PageShell from "@/components/common/layout/PageShell";
 import PuryfiConnection from "@/components/common/sessions/PuryfiConnection";
+import SessionAutomationsSummary from "@/components/common/sessions/SessionAutomationsSummary";
 import SessionSettings from "@/components/common/sessions/SessionSettings";
 import SessionSkeleton from "@/components/common/sessions/SessionSkeleton";
 import ShowPuryfiPassword from "@/components/common/sessions/keyholder/ShowPuryfiPassword";
@@ -78,7 +79,11 @@ export default function Session() {
                         ) : null}
                     </div>
 
-                    <SessionSettings session={session} />
+                    {session.automation_mode && mainToken ? (
+                        <SessionAutomationsSummary mainToken={mainToken} />
+                    ) : (
+                        <SessionSettings session={session} />
+                    )}
                 </>
             ) : (
                 <EmptySession />

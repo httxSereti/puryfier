@@ -12,6 +12,12 @@ export const defaultConfig: ChasterExtensionConfigSchema = {
         limit_count: 10,
         added_duration: 600,
     },
+    automation_permissions: {
+        wearer_can_manage: false,
+    },
+    automations_snapshot: [],
+    automations_snapshot_version: 0,
+    automations_snapshot_hash: null,
 };
 
 export function makeSession(
@@ -26,6 +32,8 @@ export function makeSession(
         puryfi_username: null,
         puryfi_support_tier: null,
         link_token: null,
+        is_self_lock: false,
+        automation_mode: false,
         config: defaultConfig,
         lock_password: null,
         ...overrides,
@@ -45,6 +53,8 @@ export function makeConfiguration(
         puryfi_support_tier: null,
         link_token: null,
         has_session: true,
+        is_self_lock: false,
+        automation_mode: false,
         config: defaultConfig,
         ...overrides,
     };

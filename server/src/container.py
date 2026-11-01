@@ -12,12 +12,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from config import Settings, get_settings
+from domain.automations.actions import ActionExecutor
+from domain.automations.engine import AutomationEngine
 from domain.ports import (
+    AutomationExecutionRepository,
+    AutomationRepository,
     ChasterGateway,
     LockSessionRepository,
+    MediaCounterRepository,
     MessageQueue,
 )
 from domain.use_cases.media_scan import MediaScanService
+from infra.automation_repositories import (
+    MongoAutomationExecutionRepository,
+    MongoAutomationRepository,
+    MongoMediaCounterRepository,
+)
 from infra.chaster import ChasterService
 from infra.queue import MongoMessageQueue
 from infra.repositories import MongoLockSessionRepository
@@ -40,6 +50,10 @@ class Container:
     media_scans: MediaScanService
     media_scan_batcher: MediaScanBatcher
     webhook_worker: WebhookInboxWorker
+    automation_repository: AutomationRepository
+    media_counter_repository: MediaCounterRepository
+    automation_execution_repository: AutomationExecutionRepository
+    automation_engine: AutomationEngine
 
 
 _active_container: Container | None = None
@@ -62,6 +76,22 @@ def build_container(settings: Settings | None = None) -> Container:
         chaster=chaster_gateway,
     )
 
+    automation_repository = MongoAutomationRepository()
+    media_counter_repository = MongoMediaCounterRepository()
+    automation_execution_repository = MongoAutomationExecutionRepository()
+    action_executor = ActionExecutor(
+        sessions=session_repository,
+        chaster=chaster_gateway,
+        puryfi=manager,
+        queue=message_queue,
+    )
+    automation_engine = AutomationEngine(
+        automations=automation_repository,
+        counters=media_counter_repository,
+        executions=automation_execution_repository,
+        actions=action_executor,
+    )
+
     return Container(
         settings=settings,
         chaster_gateway=chaster_gateway,
@@ -72,6 +102,10 @@ def build_container(settings: Settings | None = None) -> Container:
         media_scans=media_scans,
         media_scan_batcher=MediaScanBatcher(scans=media_scans),
         webhook_worker=webhook_worker,
+        automation_repository=automation_repository,
+        media_counter_repository=media_counter_repository,
+        automation_execution_repository=automation_execution_repository,
+        automation_engine=automation_engine,
     )
 
 
@@ -94,7 +128,11 @@ def get_active_container() -> Container:
 
 
 _LEGACY_EXPORTS = {
+    "automation_engine",
+    "automation_execution_repository",
+    "automation_repository",
     "chaster_gateway",
+    "media_counter_repository",
     "media_scans",
     "message_queue",
     "puryfi_registry",
