@@ -266,8 +266,17 @@ async def websocket_endpoint(
         # client disconnects. Shield the cleanup so the offline status is
         # still published and the connection is unregistered.
         async def _cleanup() -> None:
+            # Emit the automation event only for a genuine socket closure:
+            # replacements and revoked sessions have already been unregistered
+            # or superseded, and must not look like a PuryFi disconnect.
+            was_registered = registry.get(user_link_token) is connection
+            was_ready = connection.ready
             await connection.stop()
             await registry.remove(user_link_token, connection)
+            if was_registered:
+                # Emit after stop/removal so the event's actions cannot try to
+                # deliver commands through the socket that just closed.
+                connection.notify_disconnected(was_ready=was_ready)
             log.info(
                 "ws.plugin.disconnected",
                 session_id=user_lock_config.session_id,

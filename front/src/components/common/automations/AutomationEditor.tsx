@@ -8,6 +8,7 @@ import { LABEL_IMAGES } from "@/lib/automations";
 import { cn } from "@/lib/utils";
 import type {
     AutomationActionSchema,
+    AutomationConditionSchema,
     AutomationCreateSchema,
     AutomationLabelCatalogSchema,
     AutomationSchema,
@@ -43,6 +44,9 @@ interface EditorState {
     removeTimeSeconds: number;
     writeLog: boolean;
     logTitle: string;
+    // Conditions that are not edited by the simple form (for example
+    // chaster_frozen) are preserved on save.
+    extraConditions: AutomationConditionSchema[];
 }
 
 const DEFAULT_STATE: EditorState = {
@@ -65,6 +69,7 @@ const DEFAULT_STATE: EditorState = {
     removeTimeSeconds: 120,
     writeLog: false,
     logTitle: "Automation triggered",
+    extraConditions: [],
 };
 
 function conditionValue(trigger: AutomationTriggerSchema, field: string): unknown {
@@ -112,6 +117,10 @@ function stateFromInitial(
         removeTimeSeconds: Number(removeTime?.params?.seconds ?? 120),
         writeLog: Boolean(log),
         logTitle: String(log?.params?.title ?? "Automation triggered"),
+        extraConditions: (trigger.conditions ?? []).filter(
+            (condition) =>
+                condition.field !== "labels" && condition.field !== "score",
+        ),
     };
 }
 
@@ -173,17 +182,44 @@ export default function AutomationEditor({
                           removeTime: false,
                           writeLog: false,
                       }
-                    : {
-                          lockPuryfi: true,
-                          enablePuryfi: true,
-                          unlockPuryfi: false,
-                          disablePuryfi: false,
-                          addTime: false,
-                          removeTime: false,
-                          writeLog: false,
-                      };
+                    : nextEvent === "puryfi.connection.ready"
+                        ? {
+                              lockPuryfi: true,
+                              enablePuryfi: true,
+                              unlockPuryfi: false,
+                              disablePuryfi: false,
+                              addTime: false,
+                              removeTime: false,
+                              writeLog: false,
+                          }
+                        : nextEvent === "puryfi.connection.disconnected" ||
+                            nextEvent === "puryfi.state.changed" ||
+                            nextEvent === "puryfi.user.changed"
+                          ? {
+                                lockPuryfi: false,
+                                enablePuryfi: false,
+                                unlockPuryfi: false,
+                                disablePuryfi: false,
+                                addTime: false,
+                                removeTime: false,
+                                writeLog: true,
+                            }
+                          : {
+                                lockPuryfi: true,
+                                enablePuryfi: true,
+                                unlockPuryfi: false,
+                                disablePuryfi: false,
+                                addTime: false,
+                                removeTime: false,
+                                writeLog: false,
+                            };
 
-        setState((current) => ({ ...current, event: nextEvent, ...defaults }));
+        setState((current) => ({
+            ...current,
+            event: nextEvent,
+            extraConditions: [],
+            ...defaults,
+        }));
     };
 
     const handleSave = async () => {
@@ -236,7 +272,9 @@ export default function AutomationEditor({
             return;
         }
 
-        const conditions: NonNullable<AutomationTriggerSchema["conditions"]> = [];
+        const conditions: NonNullable<AutomationTriggerSchema["conditions"]> = [
+            ...state.extraConditions,
+        ];
         if (state.event === "puryfi.media.scan" && state.selectedLabels.length > 0) {
             conditions.push({
                 field: "labels",
@@ -340,6 +378,10 @@ export default function AutomationEditor({
                             <option value="chaster.lock.frozen">The Chaster lock is frozen</option>
                             <option value="chaster.lock.unfrozen">The Chaster lock is unfrozen</option>
                             <option value="puryfi.media.scan">An image is analysed by PuryFi</option>
+                            <option value="puryfi.connection.ready">PuryFi connects</option>
+                            <option value="puryfi.connection.disconnected">PuryFi disconnects</option>
+                            <option value="puryfi.state.changed">PuryFi state changes</option>
+                            <option value="puryfi.user.changed">The PuryFi account changes</option>
                         </select>
                     </label>
 
@@ -437,7 +479,7 @@ export default function AutomationEditor({
                         <span className="text-xs font-medium text-slate-300">Then</span>
                         <div className="grid gap-2 sm:grid-cols-2">
                             <ActionToggle
-                                label="Lock PuryFi with a generated password"
+                                label="Lock PuryFi with the stored or a generated password"
                                 checked={state.lockPuryfi}
                                 onChange={(checked) => update("lockPuryfi", checked)}
                             />

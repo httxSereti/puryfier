@@ -47,6 +47,7 @@ def _to_entity(document: dict[str, Any] | UserLockConfiguration) -> LockSession:
         seen_censored_objects=int(raw.get("seen_censored_objects", 0) or 0),
         lock_password=raw.get("lock_password"),
         automation_mode=bool(raw.get("automation_mode", False)),
+        chaster_frozen=bool(raw.get("chaster_frozen", False)),
         config=config,
     )
 

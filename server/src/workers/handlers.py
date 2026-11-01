@@ -6,14 +6,14 @@ the worker (and the legacy ``routes.webhooks.actions`` import path) sees simple
 fresh app instance (tests, embedded usage) never reuses stale adapters.
 """
 
-from container import get_active_container
+from container import Container, get_active_container
 from domain.automation_models import (
     EVENT_CHASTER_LOCK_FROZEN,
     EVENT_CHASTER_LOCK_UNFROZEN,
     EVENT_CHASTER_SESSION_JOINED,
     EVENT_CHASTER_SESSION_LEFT,
 )
-from domain.entities import ChasterExtensionConfigSchema
+from domain.entities import ChasterExtensionConfigSchema, LockSession
 from domain.events import build_event_key, extract_session_id
 from domain.use_cases.lock_events import (
     handle_extension_updated as _handle_extension_updated,
@@ -23,6 +23,27 @@ from domain.use_cases.lock_events import handle_lock_unfrozen as _handle_lock_un
 from domain.use_cases.session_lifecycle import (
     handle_extension_session_deleted as _handle_extension_session_deleted,
 )
+
+
+async def _sync_chaster_frozen(
+    container: Container,
+    session: LockSession,
+    *,
+    frozen: bool,
+) -> None:
+    """Persist the freeze state and mirror it on the live PuryFi connection."""
+    if session.chaster_frozen != frozen:
+        await container.session_repository.update(
+            session.session_id, chaster_frozen=frozen
+        )
+        session.chaster_frozen = frozen
+
+    if not session.link_token:
+        return
+    connection = container.puryfi_registry.get(session.link_token)
+    live_session = getattr(connection, "session", None)
+    if live_session is not None:
+        live_session.chaster_frozen = frozen
 
 
 async def _handle_with_automations(payload: dict, event_type: str, frozen: bool) -> dict | None:
@@ -35,6 +56,8 @@ async def _handle_with_automations(payload: dict, event_type: str, frozen: bool)
     session = await container.session_repository.get_by_session_id(session_id)
     if session is None or not session.automation_mode:
         return None
+
+    await _sync_chaster_frozen(container, session, frozen=frozen)
 
     try:
         event_id = build_event_key(payload) or payload.get("requestId")

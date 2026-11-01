@@ -595,6 +595,174 @@ class TestFailPending:
         run(scenario())
 
 
+class FakeAutomationEngine:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict, dict]] = []
+
+    def has_rules(self, _session_id: str) -> bool:
+        return True
+
+    def record_event_nowait(
+        self,
+        _session,
+        *,
+        event_type: str,
+        payload: dict | None = None,
+        context: dict | None = None,
+        event_id: str | None = None,
+    ) -> bool:
+        self.events.append((event_type, payload or {}, context or {}))
+        return True
+
+
+def make_event_connection(
+    *,
+    frozen: bool = False,
+) -> tuple[Connection, FakeWebSocket, FakeAutomationEngine]:
+    ws = FakeWebSocket()
+    engine = FakeAutomationEngine()
+    connection = Connection(
+        ws,
+        LockSession(
+            session_id="session-events",
+            config=ChasterExtensionConfigSchema(),
+            link_token="tok-events",
+            automation_mode=True,
+            chaster_frozen=frozen,
+        ),
+        sessions=FakeSessions(),
+        automation_engine=engine,
+    )
+    return connection, ws, engine
+
+
+class TestPuryfiProtocolEvents:
+    def test_ready_emits_connection_ready_event(self):
+        async def scenario():
+            connection, _, engine = make_event_connection()
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "ready",
+                        "payload": READY_PAYLOAD,
+                        "responseId": 1,
+                    }
+                )
+            )
+            assert [event[0] for event in engine.events] == [
+                "puryfi.connection.ready"
+            ]
+            assert engine.events[0][1]["api_version"] == "1.0.0"
+            await connection.stop()
+
+        run(scenario())
+
+    def test_intents_revocation_clears_the_grant_without_an_event(self):
+        async def scenario():
+            connection, _, engine = make_event_connection()
+            connection.ready = True
+            connection.granted_intents = set(REQUIRED_INTENTS)
+            connection.intents_granted_event.set()
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "intentsGrant",
+                        "payload": {
+                            "intents": [
+                                intent
+                                for intent in REQUIRED_INTENTS
+                                if intent != "writeEnabledState"
+                            ]
+                        },
+                    }
+                )
+            )
+
+            assert engine.events == []
+            assert connection.intents_granted is False
+            await connection.stop()
+
+        run(scenario())
+
+    def test_state_change_emits_state_event(self):
+        async def scenario():
+            connection, _, engine = make_event_connection(frozen=True)
+            connection.ready = True
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {"path": "enabled", "value": False},
+                    }
+                )
+            )
+
+            assert [event[0] for event in engine.events] == [
+                "puryfi.state.changed"
+            ]
+            _, payload, context = (
+                engine.events[0][0],
+                engine.events[0][1],
+                engine.events[0][2],
+            )
+            assert payload["puryfi_enabled"] is False
+            assert context["chaster_frozen"] is True
+            await connection.stop()
+
+        run(scenario())
+
+    def test_user_state_change_emits_user_event_and_updates_profile(self):
+        async def scenario():
+            connection, _, engine = make_event_connection()
+            connection.ready = True
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {
+                            "path": "user",
+                            "value": {
+                                "username": "alice",
+                                "supportTier": {
+                                    "level": 2,
+                                    "name": "Supporter",
+                                },
+                            },
+                        },
+                    }
+                )
+            )
+            await wait_until(
+                lambda: connection.session.puryfi_username == "alice"
+            )
+
+            assert [event[0] for event in engine.events] == [
+                "puryfi.user.changed"
+            ]
+            assert connection.session.puryfi_username == "alice"
+            await connection.stop()
+
+        run(scenario())
+
+    def test_notify_disconnected_emits_event_when_frozen(self):
+        async def scenario():
+            connection, _, engine = make_event_connection(frozen=True)
+            connection.ready = True
+
+            connection.notify_disconnected()
+
+            assert [event[0] for event in engine.events] == [
+                "puryfi.connection.disconnected"
+            ]
+            assert engine.events[0][2]["chaster_frozen"] is True
+            await connection.stop()
+
+        run(scenario())
+
+
 class TestPuryfiProfile:
     """The profile is diagnostic metadata: never block the handshake on it."""
 

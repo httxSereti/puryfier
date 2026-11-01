@@ -4,6 +4,7 @@ import secrets
 
 import structlog
 
+from domain.entities import LockSession
 from domain.events import extract_session_id
 from domain.ports import (
     LockSessionRepository,
@@ -16,6 +17,19 @@ from domain.redaction import token_fingerprint
 log = structlog.get_logger(__name__)
 
 LockCommand = tuple[str, dict]
+
+
+async def _set_chaster_frozen(
+    session_id: str,
+    *,
+    frozen: bool,
+    sessions: LockSessionRepository,
+    session: LockSession | None = None,
+) -> None:
+    """Persist the Chaster freeze state used by realtime PuryFi events."""
+    await sessions.update(session_id, chaster_frozen=frozen)
+    if session is not None:
+        session.chaster_frozen = frozen
 
 
 async def _queue_and_flush(
@@ -82,16 +96,33 @@ async def handle_lock_frozen(
         return {"status": "ok", "action": "lock_frozen_ignored_no_config"}
 
     if not session.link_token:
+        await _set_chaster_frozen(
+            session_id,
+            frozen=True,
+            sessions=sessions,
+            session=session,
+        )
         log.warning("webhook.lock_frozen.no_link_token", session_id=session_id)
         return {"status": "ok", "action": "lock_frozen_ignored_no_link_token"}
 
     if not session.config.lock_on_freeze:
+        await _set_chaster_frozen(
+            session_id,
+            frozen=True,
+            sessions=sessions,
+            session=session,
+        )
         log.debug("webhook.lock_frozen.disabled", session_id=session_id)
         return {"status": "ok", "action": "lock_frozen_ignored_config_false"}
 
     generated_password = secrets.token_urlsafe(16)
-    await sessions.update(session_id, lock_password=generated_password)
+    await sessions.update(
+        session_id,
+        lock_password=generated_password,
+        chaster_frozen=True,
+    )
     session.lock_password = generated_password
+    session.chaster_frozen = True
 
     connection, delivered = await _queue_and_flush(
         queue=queue,
@@ -159,6 +190,13 @@ async def handle_lock_unfrozen(
     if session is None or not session.config:
         log.warning("webhook.lock_unfrozen.no_config", session_id=session_id)
         return {"status": "ok", "action": "lock_unfrozen_ignored_no_config"}
+
+    await _set_chaster_frozen(
+        session_id,
+        frozen=False,
+        sessions=sessions,
+        session=session,
+    )
 
     if not session.link_token:
         log.warning("webhook.lock_unfrozen.no_link_token", session_id=session_id)

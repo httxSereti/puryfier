@@ -75,7 +75,10 @@ class TestPluginResponses:
         self, client, seed_lock_configuration, mongo_db, monkeypatch
     ):
         seed_lock_configuration(
-            session_id="session-1", link_token="tok-ok", lock_password="s3cret"
+            session_id="session-1",
+            link_token="tok-ok",
+            lock_password="s3cret",
+            chaster_frozen=True,
         )
         fake = FakeConnection(delivered=True)
         monkeypatch.setattr(
@@ -96,6 +99,10 @@ class TestPluginResponses:
         ]
         assert queued[0]["payload"] == {"secret": "s3cret"}
         assert queued[1]["payload"] == {"path": "enabled", "value": False}
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": "session-1"}
+        )
+        assert stored["chaster_frozen"] is False
 
     def test_not_ready_connection_keeps_commands_queued(
         self, client, seed_lock_configuration, mongo_db, monkeypatch

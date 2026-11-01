@@ -157,6 +157,10 @@ class LockSession:
     seen_censored_objects: int = 0
     lock_password: str | None = None
     automation_mode: bool = False
+    # Last Chaster freeze state reported by a webhook. Needed by PuryFi events
+    # such as a disconnect or a manual disable, which must be compared with
+    # the expected lock state.
+    chaster_frozen: bool = False
 
 
 @dataclass(slots=True)

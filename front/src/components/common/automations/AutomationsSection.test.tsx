@@ -210,4 +210,39 @@ describe("AutomationsSection", () => {
             screen.getAllByRole("button", { name: /Eyes and Belly/ }).length,
         ).toBeGreaterThan(0);
     });
+
+    it("keeps guard template conditions when saving", async () => {
+        const user = userEvent.setup();
+        fetchAutomationsMock.mockResolvedValue(makeList({ automations: [] }));
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("No automations yet");
+        await user.click(
+            screen.getByRole("button", {
+                name: /Warn when PuryFi disconnects/,
+            }),
+        );
+        await user.click(
+            screen.getByRole("button", { name: "Save automation" }),
+        );
+
+        await waitFor(() => {
+            expect(createAutomationMock).toHaveBeenCalledWith(
+                "config-token",
+                expect.objectContaining({
+                    name: "Warn when PuryFi disconnects",
+                    trigger: expect.objectContaining({
+                        event: "puryfi.connection.disconnected",
+                        conditions: [
+                            {
+                                field: "chaster_frozen",
+                                op: "eq",
+                                value: true,
+                            },
+                        ],
+                    }),
+                }),
+            );
+        });
+    });
 });

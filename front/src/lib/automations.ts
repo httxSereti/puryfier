@@ -13,6 +13,10 @@ const EVENT_LABELS: Record<string, string> = {
     "chaster.lock.frozen": "the Chaster lock is frozen",
     "chaster.lock.unfrozen": "the Chaster lock is unfrozen",
     "puryfi.media.scan": "an image is analysed by PuryFi",
+    "puryfi.connection.ready": "PuryFi connects",
+    "puryfi.connection.disconnected": "PuryFi disconnects",
+    "puryfi.state.changed": "the PuryFi state changes",
+    "puryfi.user.changed": "the PuryFi account changes",
 };
 
 export const LABEL_IMAGES: Record<string, string> = {
@@ -76,7 +80,7 @@ export const FALLBACK_LABELS: Record<string, string> = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-    "puryfi.lock": "lock PuryFi with a generated password",
+    "puryfi.lock": "lock PuryFi with the stored or a generated password",
     "puryfi.enable": "enable PuryFi",
     "puryfi.unlock": "unlock PuryFi with the stored password",
     "puryfi.disable": "disable PuryFi",

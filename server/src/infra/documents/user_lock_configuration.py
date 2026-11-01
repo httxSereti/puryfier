@@ -40,6 +40,10 @@ class UserLockConfiguration(Document):
     # even if the user later deletes every automation.
     automation_mode: bool = False
 
+    # Last Chaster freeze state reported by a webhook. Realtime PuryFi events
+    # use it to know whether PuryFi should still be locked/enabled.
+    chaster_frozen: bool = False
+
     # Configurations
     # Conscious decision (REVIEW.md #13): lock_password is stored in cleartext
     # because it must be retrievable to send to the Puryfi client on

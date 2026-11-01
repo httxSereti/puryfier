@@ -1,4 +1,15 @@
-import { Eye, Gift, Image, LogIn, LogOut, Snowflake, Unlock } from "lucide-react";
+import {
+    BellRing,
+    Eye,
+    Gift,
+    Image,
+    LogIn,
+    LogOut,
+    RefreshCw,
+    Snowflake,
+    TriangleAlert,
+    Unlock,
+} from "lucide-react";
 
 import type { AutomationCreateSchema } from "@/types/api";
 
@@ -213,6 +224,98 @@ const AUTOMATION_TEMPLATES: Template[] = [
                 },
             ],
             limits: { cooldown_seconds: 300, max_per_day: 0 },
+        },
+    },
+    {
+        id: "reapply-lock-on-connect",
+        label: "Reapply the lock when PuryFi connects",
+        description:
+            "When PuryFi reconnects while the Chaster lock is frozen, reapply the stored PuryFi lock and enable it.",
+        icon: RefreshCw,
+        payload: {
+            name: "Reapply PuryFi lock on connect",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.connection.ready",
+                conditions: [{ field: "chaster_frozen", op: "eq", value: true }],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "puryfi.lock", params: {}, on_failure: "stop" },
+                { type: "puryfi.enable", params: {}, on_failure: "stop" },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "warn-on-disconnect",
+        label: "Warn when PuryFi disconnects",
+        description:
+            "Write a Chaster log when PuryFi disconnects while the Chaster lock is frozen.",
+        icon: TriangleAlert,
+        payload: {
+            name: "Warn when PuryFi disconnects",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.connection.disconnected",
+                conditions: [{ field: "chaster_frozen", op: "eq", value: true }],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.log",
+                    params: {
+                        title: "PuryFi disconnected",
+                        description:
+                            "PuryFi disconnected while the Chaster lock is frozen.",
+                    },
+                    on_failure: "continue",
+                },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "warn-on-manual-disable",
+        label: "Warn when PuryFi is disabled manually",
+        description:
+            "Write a Chaster log when PuryFi is disabled while the Chaster lock is frozen.",
+        icon: BellRing,
+        payload: {
+            name: "Warn when PuryFi is disabled",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.state.changed",
+                conditions: [
+                    { field: "chaster_frozen", op: "eq", value: true },
+                    { field: "puryfi_enabled", op: "eq", value: false },
+                ],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.log",
+                    params: {
+                        title: "PuryFi disabled manually",
+                        description:
+                            "PuryFi was disabled while the Chaster lock is frozen.",
+                    },
+                    on_failure: "continue",
+                },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
         },
     },
 ];

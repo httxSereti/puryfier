@@ -190,20 +190,32 @@ class ActionExecutor:
         elif action.type == "puryfi.disable":
             commands.append(("setState", {"path": "enabled", "value": False}))
         elif action.type in {"puryfi.lock", "puryfi.set_lock"}:
-            password = action.params.get("password")
-            if not isinstance(password, str) or not password:
-                if action.type == "puryfi.set_lock":
+            requested_password = action.params.get("password")
+            if action.type == "puryfi.set_lock":
+                if (
+                    not isinstance(requested_password, str)
+                    or not requested_password
+                ):
                     return ActionResult(
                         type=action.type,
                         status="failed",
                         error="password is required for puryfi.set_lock",
                     )
-                password = secrets.token_urlsafe(16)
+                password = requested_password
+            else:
+                # Reapplying a lock must not silently rotate the emergency
+                # password: reuse the stored one and only generate a password
+                # when this lock never had one.
+                password = session.lock_password
+                if not password:
+                    password = (
+                        requested_password
+                        if isinstance(requested_password, str)
+                        and requested_password
+                        else secrets.token_urlsafe(16)
+                    )
 
-            if (
-                action.type == "puryfi.set_lock"
-                or password != session.lock_password
-            ):
+            if password != session.lock_password:
                 await self._sessions.update(
                     session.session_id, lock_password=password
                 )

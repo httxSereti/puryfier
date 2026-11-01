@@ -25,6 +25,7 @@ EVENT_PURYFI_MEDIA_SCAN = "puryfi.media.scan"
 EVENT_PURYFI_CONNECTION_READY = "puryfi.connection.ready"
 EVENT_PURYFI_CONNECTION_DISCONNECTED = "puryfi.connection.disconnected"
 EVENT_PURYFI_STATE_CHANGED = "puryfi.state.changed"
+EVENT_PURYFI_USER_CHANGED = "puryfi.user.changed"
 
 SUPPORTED_EVENTS = (
     EVENT_CHASTER_SESSION_JOINED,
@@ -32,6 +33,10 @@ SUPPORTED_EVENTS = (
     EVENT_CHASTER_LOCK_FROZEN,
     EVENT_CHASTER_LOCK_UNFROZEN,
     EVENT_PURYFI_MEDIA_SCAN,
+    EVENT_PURYFI_CONNECTION_READY,
+    EVENT_PURYFI_CONNECTION_DISCONNECTED,
+    EVENT_PURYFI_STATE_CHANGED,
+    EVENT_PURYFI_USER_CHANGED,
 )
 
 EVENT_LABELS = {
@@ -44,7 +49,16 @@ EVENT_LABELS = {
     EVENT_PURYFI_CONNECTION_READY: "PuryFi connected",
     EVENT_PURYFI_CONNECTION_DISCONNECTED: "PuryFi disconnected",
     EVENT_PURYFI_STATE_CHANGED: "PuryFi state changed",
+    EVENT_PURYFI_USER_CHANGED: "PuryFi account changed",
 }
+
+# Intents without which Puryfier cannot enforce the lock anymore. They are the
+# meaningful subset of the plugin permissions for lock control (enable/disable
+# and lock configuration).
+PURYFI_LOCK_INTENTS = (
+    "writeLockConfigurationState",
+    "writeEnabledState",
+)
 
 # Human-readable names for the SDK labels. The canonical value stored in a
 # condition is the PuryfiObjectLabel member name (for example "Eye").
@@ -402,14 +416,47 @@ def automation_catalog() -> AutomationCatalogSchema:
                 ),
                 supports_count=True,
             ),
+            AutomationEventCatalogSchema(
+                type=EVENT_PURYFI_CONNECTION_READY,
+                label="PuryFi connected",
+                description=(
+                    "Runs when PuryFi accepts the plugin connection. Use it to "
+                    "reapply the lock configuration after a reconnect."
+                ),
+            ),
+            AutomationEventCatalogSchema(
+                type=EVENT_PURYFI_CONNECTION_DISCONNECTED,
+                label="PuryFi disconnected",
+                description=(
+                    "Runs when the PuryFi socket closes after a successful "
+                    "connection. Combine it with a frozen-lock condition to "
+                    "warn the keyholder."
+                ),
+            ),
+            AutomationEventCatalogSchema(
+                type=EVENT_PURYFI_STATE_CHANGED,
+                label="PuryFi state changed",
+                description=(
+                    "Runs when PuryFi reports a change to its enabled or lock "
+                    "state, for example when it is disabled manually."
+                ),
+            ),
+            AutomationEventCatalogSchema(
+                type=EVENT_PURYFI_USER_CHANGED,
+                label="PuryFi account changed",
+                description=(
+                    "Runs when the PuryFi user profile changes. The stored "
+                    "PuryFi profile is updated automatically."
+                ),
+            ),
         ],
         actions=[
             AutomationActionCatalogSchema(
                 type="puryfi.lock",
-                label="Lock PuryFi with a generated password",
+                label="Lock PuryFi with the stored or a generated password",
                 description=(
-                    "Creates a new PuryFi lock password, stores it for the "
-                    "keyholder, and applies the lock configuration."
+                    "Applies the PuryFi lock configuration. Reuses the stored "
+                    "password when one exists and generates a new one otherwise."
                 ),
                 params=[
                     AutomationActionParamCatalogSchema(

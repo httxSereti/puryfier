@@ -108,6 +108,10 @@ Audit trail with a 90-day TTL:
 - `chaster.lock.frozen`
 - `chaster.lock.unfrozen`
 - `puryfi.media.scan`
+- `puryfi.connection.ready` (PuryFi `ready` accepted)
+- `puryfi.connection.disconnected` (PuryFi socket closed)
+- `puryfi.state.changed` (PuryFi `stateChange` on `enabled` or `lockConfiguration`)
+- `puryfi.user.changed` (PuryFi `stateChange` on `user`)
 
 ### Supported conditions
 
@@ -120,6 +124,25 @@ Audit trail with a 90-day TTL:
 | `puryfi_enabled` | `eq`, `neq` |
 | `puryfi_has_lock` | `eq`, `neq` |
 
+### PuryFi protocol events
+
+PuryFi events are emitted from the live WebSocket connection and evaluated by the
+same engine as Chaster events. Their context is a snapshot of the connection:
+
+| Field | Meaning |
+| --- | --- |
+| `chaster_frozen` | Last freeze state persisted from a Chaster webhook |
+| `puryfi_enabled` | Last `enabled` state reported by PuryFi (`null` if unknown) |
+| `puryfi_has_lock` | Whether PuryFi currently reports a lock configuration |
+
+When a lock-control intent is revoked, a server warning is written and
+protected commands stay in the durable queue until the permissions return.
+
+The configuration editor exposes ready-made templates for the common guard
+behaviours: reapply the lock on reconnect, warn on a disconnect while frozen,
+and warn when PuryFi is disabled while frozen. The PuryFi profile itself is
+always updated automatically on `puryfi.user.changed`.
+
 ### Label artwork
 
 The configuration editor uses PuryFi's body-part artwork from
@@ -129,7 +152,7 @@ The configuration editor uses PuryFi's body-part artwork from
 
 | Type | Params |
 | --- | --- |
-| `puryfi.lock` | optional `timer_seconds`, `timer_plus` |
+| `puryfi.lock` | optional `timer_seconds`, `timer_plus` (reuses the stored password) |
 | `puryfi.enable` | — |
 | `puryfi.unlock` | — |
 | `puryfi.disable` | — |

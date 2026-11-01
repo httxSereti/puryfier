@@ -75,6 +75,7 @@ class TestReadinessGating:
         stored = mongo_db["users_lock_configurations"].find_one(
             {"session_id": "session-1"}
         )
+        assert stored["chaster_frozen"] is True
         # SDK review 3.3: send the full WriteOnlyValue<"lockConfiguration">
         # shape, including the explicit null timer fields.
         # SDK review 6.2: configure the lock before enabling PuryFi, so a

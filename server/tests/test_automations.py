@@ -12,9 +12,15 @@ from test_webhooks_chaster import wait_for_inbox
 
 from domain.automation_models import (
     EVENT_PURYFI_MEDIA_SCAN,
+    EVENT_PURYFI_STATE_CHANGED,
     AutomationActionSchema,
+    automation_catalog,
 )
-from domain.automations.actions import ActionResult
+from domain.automations.actions import (
+    ActionContext,
+    ActionExecutor,
+    ActionResult,
+)
 from domain.automations.engine import AutomationEngine
 from domain.entities import ChasterExtensionConfigSchema, LockSession
 
@@ -278,6 +284,78 @@ class TestAutomationApi:
             {"session_id": SESSION_ID}
         )
         assert session["lock_password"]
+
+    def test_disconnect_event_runs_an_automation(
+        self,
+        client,
+        seed_lock_configuration,
+        mock_chaster_api,
+        mongo_db,
+    ):
+        import time
+
+        import msgpack
+
+        from models.connection_manager import manager
+
+        manager._connections.clear()
+        manager._locks.clear()
+        seed_automation_session(
+            seed_lock_configuration,
+            chaster_frozen=True,
+        )
+        mock_chaster_api(
+            make_configuration_response(
+                role="keyholder", session_id=SESSION_ID
+            )
+        )
+        created = client.post(
+            "/api/configuration/config-token/automations",
+            json=automation_payload(
+                name="Warn on disconnect",
+                event="puryfi.connection.disconnected",
+                actions=[
+                    {
+                        "type": "chaster.log",
+                        "params": {"title": "PuryFi disconnected"},
+                        "on_failure": "continue",
+                    }
+                ],
+            ),
+        )
+        assert created.status_code == 201, created.text
+
+        with client.websocket_connect("/ws/token-1") as puryfi:
+            puryfi.send_bytes(
+                msgpack.packb(
+                    {
+                        "type": "ready",
+                        "payload": {
+                            "version": "0.8.7.1",
+                            "apiVersion": "1.0.0",
+                            "instanceId": "test-instance",
+                        },
+                        "responseId": 1,
+                    }
+                )
+            )
+            # Wait for the ready acknowledgement before closing, so the
+            # connection is considered connected by the cleanup path.
+            puryfi.receive_bytes()
+
+        for _ in range(200):
+            execution = mongo_db["automation_executions"].find_one(
+                {"event_type": "puryfi.connection.disconnected"}
+            )
+            if execution is not None and execution["status"] != "running":
+                break
+            time.sleep(0.01)
+
+        assert execution is not None
+        assert execution["status"] == "success"
+        assert [action["type"] for action in execution["actions"]] == [
+            "chaster.log"
+        ]
 
     def test_test_endpoint_returns_a_dry_run_result(
         self, client, seed_lock_configuration, mock_chaster_api
@@ -607,6 +685,128 @@ class TestAutomationEngine:
             limits={"cooldown_seconds": 0, "max_per_day": 0},
         )
 
+    def _event_rule(
+        self,
+        event: str,
+        conditions: list[dict] | None = None,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            id="event-rule-1",
+            session_id=SESSION_ID,
+            owner_id=KEYHOLDER_ID,
+            owner_role="keyholder",
+            name="PuryFi event rule",
+            enabled=True,
+            priority=100,
+            trigger={
+                "event": event,
+                "conditions": conditions or [],
+                "count": 1,
+                "window_seconds": 0,
+                "count_mode": "images",
+            },
+            actions=[
+                {
+                    "type": "chaster.log",
+                    "params": {"title": "PuryFi event"},
+                }
+            ],
+            limits={"cooldown_seconds": 0, "max_per_day": 0},
+        )
+
+    def test_catalog_exposes_puryfi_protocol_events(self):
+        events = {event.type for event in automation_catalog().events}
+        assert EVENT_PURYFI_STATE_CHANGED in events
+        assert "puryfi.connection.ready" in events
+        assert "puryfi.connection.disconnected" in events
+        assert "puryfi.user.changed" in events
+        assert "puryfi.intents.changed" not in events
+
+    def test_event_rule_uses_puryfi_state_context(self):
+        async def run():
+            rule = self._event_rule(
+                EVENT_PURYFI_STATE_CHANGED,
+                [
+                    {"field": "puryfi_enabled", "op": "eq", "value": False},
+                    {"field": "chaster_frozen", "op": "eq", "value": True},
+                ],
+            )
+            engine, actions = self._engine(rule)
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+                automation_mode=True,
+                chaster_frozen=True,
+            )
+            await engine.load_session(session)
+
+            assert engine.record_event_nowait(
+                session,
+                event_type=EVENT_PURYFI_STATE_CHANGED,
+                payload={"path": "enabled"},
+                context={
+                    "puryfi_enabled": False,
+                    "puryfi_has_lock": False,
+                    "chaster_frozen": True,
+                },
+            )
+            await asyncio.gather(*list(engine._tasks))
+
+            assert len(actions.calls) == 1
+            assert actions.calls[0][0].type == "chaster.log"
+
+        asyncio.run(run())
+
+    def test_event_rule_ignores_a_non_matching_context(self):
+        async def run():
+            rule = self._event_rule(
+                EVENT_PURYFI_STATE_CHANGED,
+                [{"field": "puryfi_enabled", "op": "eq", "value": False}],
+            )
+            engine, actions = self._engine(rule)
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+                automation_mode=True,
+            )
+            await engine.load_session(session)
+
+            assert engine.record_event_nowait(
+                session,
+                event_type=EVENT_PURYFI_STATE_CHANGED,
+                context={"puryfi_enabled": True},
+            )
+            await asyncio.gather(*list(engine._tasks))
+
+            assert actions.calls == []
+
+        asyncio.run(run())
+
+    def test_event_rule_does_not_match_an_unknown_state(self):
+        async def run():
+            rule = self._event_rule(
+                EVENT_PURYFI_STATE_CHANGED,
+                [{"field": "puryfi_enabled", "op": "eq", "value": False}],
+            )
+            engine, actions = self._engine(rule)
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+                automation_mode=True,
+            )
+            await engine.load_session(session)
+
+            assert engine.record_event_nowait(
+                session,
+                event_type=EVENT_PURYFI_STATE_CHANGED,
+                context={"puryfi_enabled": None},
+            )
+            await asyncio.gather(*list(engine._tasks))
+
+            assert actions.calls == []
+
+        asyncio.run(run())
+
     def test_counts_matching_images_and_triggers_once(self):
         async def run():
             engine, actions = self._engine(self._rule(count=2))
@@ -694,5 +894,113 @@ class TestAutomationEngine:
             )
             assert engine.record_nowait(session, []) is False
             assert actions.calls == []
+
+        asyncio.run(run())
+
+
+class FakeActionSessions:
+    def __init__(self) -> None:
+        self.updates: list[tuple[str, dict]] = []
+
+    async def update(self, session_id: str, **fields) -> bool:
+        self.updates.append((session_id, fields))
+        return True
+
+
+class FakeActionQueue:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str, dict]] = []
+
+    async def enqueue(
+        self, link_token: str, msg_type: str, payload: dict
+    ) -> None:
+        self.messages.append((link_token, msg_type, payload))
+
+
+class FakeActionRegistry:
+    def get(self, _link_token: str):
+        return None
+
+
+def make_action_executor(
+    session: LockSession,
+) -> tuple[ActionExecutor, FakeActionSessions, FakeActionQueue]:
+    sessions = FakeActionSessions()
+    queue = FakeActionQueue()
+    executor = ActionExecutor(
+        sessions=sessions,  # type: ignore[arg-type]
+        chaster=SimpleNamespace(),  # type: ignore[arg-type]
+        puryfi=FakeActionRegistry(),  # type: ignore[arg-type]
+        queue=queue,  # type: ignore[arg-type]
+    )
+    return executor, sessions, queue
+
+
+class TestPuryfiLockAction:
+    def test_lock_reuses_the_stored_password(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+                link_token="token-1",
+                lock_password="stored-secret",
+            )
+            executor, sessions, queue = make_action_executor(session)
+
+            result = await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="puryfi.lock",
+                        params={},
+                        on_failure="stop",
+                    )
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="puryfi.connection.ready",
+                ),
+            )
+
+            assert result[0].status == "queued"
+            assert sessions.updates == []
+            assert queue.messages[0][2]["value"]["password"] == {
+                "secret": "stored-secret"
+            }
+
+        asyncio.run(run())
+
+    def test_lock_generates_a_password_only_when_none_exists(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+                link_token="token-1",
+            )
+            executor, sessions, queue = make_action_executor(session)
+
+            result = await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="puryfi.lock",
+                        params={},
+                        on_failure="stop",
+                    )
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="puryfi.connection.ready",
+                ),
+            )
+
+            assert result[0].status == "queued"
+            assert session.lock_password
+            assert sessions.updates == [
+                (SESSION_ID, {"lock_password": session.lock_password})
+            ]
+            assert queue.messages[0][2]["value"]["password"] == {
+                "secret": session.lock_password
+            }
 
         asyncio.run(run())

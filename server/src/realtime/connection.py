@@ -7,6 +7,13 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket
 
+from domain.automation_models import (
+    EVENT_PURYFI_CONNECTION_DISCONNECTED,
+    EVENT_PURYFI_CONNECTION_READY,
+    EVENT_PURYFI_STATE_CHANGED,
+    EVENT_PURYFI_USER_CHANGED,
+    PURYFI_LOCK_INTENTS,
+)
 from domain.automations.engine import AutomationEngine
 from domain.entities import (
     ChasterExtensionConfigSchema,
@@ -172,6 +179,68 @@ class Connection:
     async def _publish_status(self) -> None:
         if self._status_publisher is not None:
             await self._status_publisher(self)
+
+    def _automation_context(self) -> dict[str, object]:
+        """Snapshot the state automation conditions can inspect."""
+        return {
+            "chaster_frozen": bool(
+                getattr(self.session, "chaster_frozen", False)
+            ),
+            "puryfi_enabled": self.puryfi_enabled,
+            "puryfi_has_lock": self.puryfi_has_lock,
+        }
+
+    def _record_automation_event(
+        self,
+        event_type: str,
+        payload: dict | None = None,
+    ) -> None:
+        """Feed a PuryFi protocol event to the rule engine without blocking.
+
+        The engine only schedules work when the session has an enabled rule
+        for this event. Profile/state updates themselves stay synchronous.
+        """
+        engine = self._automation_engine
+        if engine is None:
+            return
+        if (
+            not getattr(self.session, "automation_mode", False)
+            and not engine.has_rules(self.session.session_id)
+        ):
+            return
+
+        try:
+            engine.record_event_nowait(
+                self.session,
+                event_type=event_type,
+                payload=payload or {},
+                context=self._automation_context(),
+            )
+        except Exception:
+            log.exception(
+                "connection.automation_event_failed",
+                session_id=getattr(self.session, "session_id", None),
+                event_type=event_type,
+            )
+
+    def notify_disconnected(self, *, was_ready: bool | None = None) -> None:
+        """Emit the disconnect event for a genuine PuryFi socket closure."""
+        if not (self.ready if was_ready is None else was_ready):
+            return
+        if getattr(self.session, "chaster_frozen", False):
+            log.warning(
+                "connection.disconnected_while_frozen",
+                session_id=getattr(self.session, "session_id", None),
+                puryfi_version=self.puryfi_version,
+            )
+        self._record_automation_event(
+            EVENT_PURYFI_CONNECTION_DISCONNECTED,
+            {
+                "puryfi_version": self.puryfi_version,
+                "api_version": self.api_version,
+                "instance_id": self.instance_id,
+            },
+        )
 
     async def start(self) -> None:
         """Start the connection actor (idempotent)."""
@@ -378,6 +447,14 @@ class Connection:
                     instance_id=self.instance_id,
                 )
                 await self._publish_status()
+                self._record_automation_event(
+                    EVENT_PURYFI_CONNECTION_READY,
+                    {
+                        "puryfi_version": self.puryfi_version,
+                        "api_version": self.api_version,
+                        "instance_id": self.instance_id,
+                    },
+                )
                 start_bootstrap = True
 
         elif msg_type == "configurationChange":
@@ -387,7 +464,18 @@ class Connection:
         elif msg_type == "intentsGrant":
             granted = set(payload.get("intents", []))
             previous = self.granted_intents
+            removed = sorted(previous - granted)
             self.granted_intents = granted
+
+            revoked_lock_intents = sorted(
+                set(PURYFI_LOCK_INTENTS) & set(removed)
+            )
+            if revoked_lock_intents:
+                log.warning(
+                    "connection.lock_intents_revoked",
+                    session_id=self.session.session_id,
+                    removed_intents=revoked_lock_intents,
+                )
 
             newly_optional = {
                 intent
@@ -400,7 +488,10 @@ class Connection:
                     name="puryfi-optional-state-refresh",
                 )
 
-            if all(intent in granted for intent in intents):
+            all_required_granted = all(
+                intent in granted for intent in intents
+            )
+            if all_required_granted:
                 newly_granted = not self.intents_granted_event.is_set()
                 self.intents_granted_event.set()
                 # Commands queued while intents were missing must not wait for
@@ -415,12 +506,28 @@ class Connection:
                         self._on_intents_granted(),
                         name="puryfi-intents-drain",
                     )
+            else:
+                # Permissions can be revoked after the handshake. Protected
+                # commands must stay in the durable queue until they return.
+                self.intents_granted_event.clear()
 
         elif msg_type == "stateChange":
             # Keep the cached profile and PuryFi state in sync. These handlers
             # only touch memory; persistence runs in a supervised task.
-            self._handle_profile_state_change(payload)
-            self._handle_puryfi_state_change(payload)
+            if self._handle_profile_state_change(payload):
+                self._record_automation_event(
+                    EVENT_PURYFI_USER_CHANGED,
+                    payload,
+                )
+            if self._handle_puryfi_state_change(payload):
+                self._record_automation_event(
+                    EVENT_PURYFI_STATE_CHANGED,
+                    {
+                        "path": payload.get("path"),
+                        "puryfi_enabled": self.puryfi_enabled,
+                        "puryfi_has_lock": self.puryfi_has_lock,
+                    },
+                )
 
         elif msg_type == "staticMediaScan":
             # Never do I/O here: PuryFi can emit dozens of scans per second and
@@ -924,8 +1031,12 @@ class Connection:
             name="puryfi-profile-retry",
         )
 
-    def _handle_puryfi_state_change(self, payload: dict) -> None:
-        """Update the cached enabled/lock state reported by PuryFi."""
+    def _handle_puryfi_state_change(self, payload: dict) -> bool:
+        """Update the cached enabled/lock state reported by PuryFi.
+
+        Returns True when the cached value actually changed, so the same
+        protocol message can feed the automation engine.
+        """
         path = payload.get("path")
         value = payload.get("value")
         changed = False
@@ -934,6 +1045,16 @@ class Connection:
             if value != self.puryfi_enabled:
                 self.puryfi_enabled = value
                 changed = True
+                if (
+                    not value
+                    and getattr(self.session, "chaster_frozen", False)
+                ):
+                    log.warning(
+                        "connection.puryfi_disabled_while_frozen",
+                        session_id=getattr(
+                            self.session, "session_id", None
+                        ),
+                    )
         elif path == "lockConfiguration":
             has_lock = isinstance(value, dict)
             if has_lock != self.puryfi_has_lock:
@@ -942,8 +1063,9 @@ class Connection:
 
         if changed:
             self._spawn(self._publish_status(), name="puryfi-state-publish")
+        return changed
 
-    def _handle_profile_state_change(self, payload: dict) -> None:
+    def _handle_profile_state_change(self, payload: dict) -> bool:
         """Update the cached profile when PuryFi reports a ``user`` change."""
         path = payload.get("path")
         value = payload.get("value")
@@ -962,6 +1084,8 @@ class Connection:
                 self._persist_profile_and_publish(updates),
                 name="puryfi-profile-sync",
             )
+            return True
+        return False
 
     async def _persist_profile_and_publish(
         self, updates: dict[str, object]

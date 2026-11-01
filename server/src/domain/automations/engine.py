@@ -244,6 +244,51 @@ class AutomationEngine:
             )
             return True
 
+    def record_event_nowait(
+        self,
+        session: LockSession,
+        *,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+        event_id: str | None = None,
+    ) -> bool:
+        """Evaluate a low-volume event without blocking its producer.
+
+        PuryFi protocol events (ready, disconnect, permission/state/profile
+        changes) arrive on the WebSocket read loop. Persisting executions and
+        running Chaster/PuryFi actions are I/O, so they are moved to a
+        supervised task like media triggers. Returns True when a matching rule
+        was potentially scheduled.
+        """
+        if self._stopping:
+            return False
+        if (
+            not session.automation_mode
+            and session.session_id not in self._automation_sessions
+        ):
+            return False
+
+        rules = self._cache.get(session.session_id)
+        if not rules:
+            return False
+        if not any(
+            rule.enabled and rule.trigger.event == event_type for rule in rules
+        ):
+            return False
+
+        self._spawn(
+            self.evaluate_event(
+                session,
+                event_type=event_type,
+                payload=payload or {},
+                context=context,
+                event_id=event_id,
+            ),
+            name=f"automation-event:{event_type}",
+        )
+        return True
+
     def _count_match(
         self,
         session: LockSession,
@@ -458,7 +503,16 @@ class AutomationEngine:
     ) -> dict[str, Any]:
         compiled = self._compile_schema(rule, session_id=session.session_id)
         payload = event or self._sample_event(compiled.trigger)
-        matched = self._matches(compiled.trigger, payload, {})
+        context = {
+            "chaster_frozen": bool(
+                getattr(session, "chaster_frozen", False)
+            ),
+            # Live PuryFi state is not persisted: a dry run only knows the
+            # Chaster side and must not pretend the plugin state is known.
+            "puryfi_enabled": None,
+            "puryfi_has_lock": None,
+        }
+        matched = self._matches(compiled.trigger, payload, context)
         return {
             "matched": matched,
             "reason": None if matched else "The sample event does not satisfy the conditions.",
@@ -543,12 +597,21 @@ class AutomationEngine:
         if field == "object_count":
             return self._compare(int(payload.get("object_count") or 0), op, expected)
 
-        if field in {"chaster_frozen", "puryfi_enabled", "puryfi_has_lock"}:
-            actual = bool(context.get(field))
+        if field in {
+            "chaster_frozen",
+            "puryfi_enabled",
+            "puryfi_has_lock",
+        }:
+            actual = context.get(field)
+            # A condition on a state the event does not know yet (for example
+            # puryfi_enabled on `ready`, before the first getState) must not
+            # silently behave as False.
+            if actual is None:
+                return False
             if op == "eq":
-                return actual == bool(expected)
+                return bool(actual) == bool(expected)
             if op == "neq":
-                return actual != bool(expected)
+                return bool(actual) != bool(expected)
             return False
 
         return False
