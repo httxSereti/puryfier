@@ -13,8 +13,11 @@ from test_extensions import make_chaster_response, make_configuration_response
 from test_webhooks_chaster import wait_for_inbox
 
 from domain.automation_models import (
+    EVENT_PURYFI_DISABLED,
+    EVENT_PURYFI_ENABLED,
+    EVENT_PURYFI_LOCKED,
     EVENT_PURYFI_MEDIA_SCAN,
-    EVENT_PURYFI_STATE_CHANGED,
+    EVENT_PURYFI_UNLOCKED,
     AutomationActionSchema,
     automation_catalog,
 )
@@ -751,10 +754,18 @@ class TestAutomationEngine:
 
     def test_catalog_exposes_puryfi_protocol_events(self):
         events = {event.type for event in automation_catalog().events}
-        assert EVENT_PURYFI_STATE_CHANGED in events
+        assert {
+            EVENT_PURYFI_ENABLED,
+            EVENT_PURYFI_DISABLED,
+            EVENT_PURYFI_LOCKED,
+            EVENT_PURYFI_UNLOCKED,
+        } <= events
         assert "puryfi.connection.ready" in events
         assert "puryfi.connection.disconnected" in events
-        assert "puryfi.user.changed" in events
+        assert "puryfi.state.changed" not in events
+        assert "puryfi.user.changed" not in events
+        assert "puryfi.account.username.changed" not in events
+        assert "puryfi.account.support_tier.changed" not in events
         assert "puryfi.intents.changed" not in events
 
     def test_catalog_exposes_chaster_lock_actions(self):
@@ -770,7 +781,7 @@ class TestAutomationEngine:
     def test_event_rule_uses_puryfi_state_context(self):
         async def run():
             rule = self._event_rule(
-                EVENT_PURYFI_STATE_CHANGED,
+                EVENT_PURYFI_DISABLED,
                 [
                     {"field": "puryfi_enabled", "op": "eq", "value": False},
                     {"field": "chaster_frozen", "op": "eq", "value": True},
@@ -787,7 +798,7 @@ class TestAutomationEngine:
 
             assert engine.record_event_nowait(
                 session,
-                event_type=EVENT_PURYFI_STATE_CHANGED,
+                event_type=EVENT_PURYFI_DISABLED,
                 payload={"path": "enabled"},
                 context={
                     "puryfi_enabled": False,
@@ -805,7 +816,7 @@ class TestAutomationEngine:
     def test_event_rule_ignores_a_non_matching_context(self):
         async def run():
             rule = self._event_rule(
-                EVENT_PURYFI_STATE_CHANGED,
+                EVENT_PURYFI_DISABLED,
                 [{"field": "puryfi_enabled", "op": "eq", "value": False}],
             )
             engine, actions = self._engine(rule)
@@ -818,7 +829,7 @@ class TestAutomationEngine:
 
             assert engine.record_event_nowait(
                 session,
-                event_type=EVENT_PURYFI_STATE_CHANGED,
+                event_type=EVENT_PURYFI_DISABLED,
                 context={"puryfi_enabled": True},
             )
             await asyncio.gather(*list(engine._tasks))
@@ -830,7 +841,7 @@ class TestAutomationEngine:
     def test_event_rule_does_not_match_an_unknown_state(self):
         async def run():
             rule = self._event_rule(
-                EVENT_PURYFI_STATE_CHANGED,
+                EVENT_PURYFI_DISABLED,
                 [{"field": "puryfi_enabled", "op": "eq", "value": False}],
             )
             engine, actions = self._engine(rule)
@@ -843,7 +854,7 @@ class TestAutomationEngine:
 
             assert engine.record_event_nowait(
                 session,
-                event_type=EVENT_PURYFI_STATE_CHANGED,
+                event_type=EVENT_PURYFI_DISABLED,
                 context={"puryfi_enabled": None},
             )
             await asyncio.gather(*list(engine._tasks))

@@ -15,8 +15,10 @@ const EVENT_LABELS: Record<string, string> = {
     "puryfi.media.scan": "an image is analysed by PuryFi",
     "puryfi.connection.ready": "PuryFi connects",
     "puryfi.connection.disconnected": "PuryFi disconnects",
-    "puryfi.state.changed": "the PuryFi state changes",
-    "puryfi.user.changed": "the PuryFi account changes",
+    "puryfi.enabled": "PuryFi is enabled",
+    "puryfi.disabled": "PuryFi is disabled",
+    "puryfi.locked": "PuryFi is locked",
+    "puryfi.unlocked": "PuryFi is unlocked",
 };
 
 export const LABEL_IMAGES: Record<string, string> = {

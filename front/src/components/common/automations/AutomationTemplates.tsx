@@ -457,10 +457,9 @@ const AUTOMATION_TEMPLATES: Template[] = [
             enabled: true,
             priority: 100,
             trigger: {
-                event: "puryfi.state.changed",
+                event: "puryfi.disabled",
                 conditions: [
                     { field: "chaster_frozen", op: "eq", value: true },
-                    { field: "puryfi_enabled", op: "eq", value: false },
                 ],
                 min_score: 0,
                 count: 1,

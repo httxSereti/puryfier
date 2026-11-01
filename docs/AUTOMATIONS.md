@@ -110,8 +110,10 @@ Audit trail with a 90-day TTL:
 - `puryfi.media.scan`
 - `puryfi.connection.ready` (PuryFi `ready` accepted)
 - `puryfi.connection.disconnected` (PuryFi socket closed)
-- `puryfi.state.changed` (PuryFi `stateChange` on `enabled` or `lockConfiguration`)
-- `puryfi.user.changed` (PuryFi `stateChange` on `user`)
+- `puryfi.enabled` (PuryFi `stateChange` on `enabled` becoming `true`)
+- `puryfi.disabled` (PuryFi `stateChange` on `enabled` becoming `false`)
+- `puryfi.locked` (PuryFi `stateChange` with a `lockConfiguration`)
+- `puryfi.unlocked` (PuryFi `stateChange` without a `lockConfiguration`)
 
 ### Supported conditions
 
@@ -141,7 +143,8 @@ protected commands stay in the durable queue until the permissions return.
 The configuration editor exposes ready-made templates for the common guard
 behaviours: reapply the lock on reconnect, warn on a disconnect while frozen,
 and warn when PuryFi is disabled while frozen. The PuryFi profile itself is
-always updated automatically on `puryfi.user.changed`.
+always updated automatically, but account changes do not emit automation
+events.
 
 ### Label artwork
 

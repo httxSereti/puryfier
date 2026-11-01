@@ -57,6 +57,14 @@ interface EditorState {
     extraConditions: AutomationConditionSchema[];
 }
 
+const LOG_ONLY_EVENTS = new Set([
+    "puryfi.connection.disconnected",
+    "puryfi.enabled",
+    "puryfi.disabled",
+    "puryfi.locked",
+    "puryfi.unlocked",
+]);
+
 const DEFAULT_STATE: EditorState = {
     name: "",
     event: "chaster.lock.frozen",
@@ -212,11 +220,7 @@ export default function AutomationEditor({
             Object.assign(defaults, { addTime: true });
         } else if (nextEvent === "puryfi.connection.ready") {
             Object.assign(defaults, { lockPuryfi: true, enablePuryfi: true });
-        } else if (
-            nextEvent === "puryfi.connection.disconnected" ||
-            nextEvent === "puryfi.state.changed" ||
-            nextEvent === "puryfi.user.changed"
-        ) {
+        } else if (LOG_ONLY_EVENTS.has(nextEvent)) {
             Object.assign(defaults, { writeLog: true });
         } else {
             Object.assign(defaults, { lockPuryfi: true, enablePuryfi: true });
@@ -415,8 +419,10 @@ export default function AutomationEditor({
                             <option value="puryfi.media.scan">An image is analysed by PuryFi</option>
                             <option value="puryfi.connection.ready">PuryFi connects</option>
                             <option value="puryfi.connection.disconnected">PuryFi disconnects</option>
-                            <option value="puryfi.state.changed">PuryFi state changes</option>
-                            <option value="puryfi.user.changed">The PuryFi account changes</option>
+                            <option value="puryfi.enabled">PuryFi is enabled</option>
+                            <option value="puryfi.disabled">PuryFi is disabled</option>
+                            <option value="puryfi.locked">PuryFi is locked</option>
+                            <option value="puryfi.unlocked">PuryFi is unlocked</option>
                         </select>
                     </label>
 

@@ -24,8 +24,10 @@ EVENT_CHASTER_SESSION_DELETED = "chaster.session.deleted"
 EVENT_PURYFI_MEDIA_SCAN = "puryfi.media.scan"
 EVENT_PURYFI_CONNECTION_READY = "puryfi.connection.ready"
 EVENT_PURYFI_CONNECTION_DISCONNECTED = "puryfi.connection.disconnected"
-EVENT_PURYFI_STATE_CHANGED = "puryfi.state.changed"
-EVENT_PURYFI_USER_CHANGED = "puryfi.user.changed"
+EVENT_PURYFI_ENABLED = "puryfi.enabled"
+EVENT_PURYFI_DISABLED = "puryfi.disabled"
+EVENT_PURYFI_LOCKED = "puryfi.locked"
+EVENT_PURYFI_UNLOCKED = "puryfi.unlocked"
 
 SUPPORTED_EVENTS = (
     EVENT_CHASTER_SESSION_JOINED,
@@ -35,8 +37,10 @@ SUPPORTED_EVENTS = (
     EVENT_PURYFI_MEDIA_SCAN,
     EVENT_PURYFI_CONNECTION_READY,
     EVENT_PURYFI_CONNECTION_DISCONNECTED,
-    EVENT_PURYFI_STATE_CHANGED,
-    EVENT_PURYFI_USER_CHANGED,
+    EVENT_PURYFI_ENABLED,
+    EVENT_PURYFI_DISABLED,
+    EVENT_PURYFI_LOCKED,
+    EVENT_PURYFI_UNLOCKED,
 )
 
 EVENT_LABELS = {
@@ -48,8 +52,10 @@ EVENT_LABELS = {
     EVENT_PURYFI_MEDIA_SCAN: "Image analysed by PuryFi",
     EVENT_PURYFI_CONNECTION_READY: "PuryFi connected",
     EVENT_PURYFI_CONNECTION_DISCONNECTED: "PuryFi disconnected",
-    EVENT_PURYFI_STATE_CHANGED: "PuryFi state changed",
-    EVENT_PURYFI_USER_CHANGED: "PuryFi account changed",
+    EVENT_PURYFI_ENABLED: "PuryFi enabled",
+    EVENT_PURYFI_DISABLED: "PuryFi disabled",
+    EVENT_PURYFI_LOCKED: "PuryFi locked",
+    EVENT_PURYFI_UNLOCKED: "PuryFi unlocked",
 }
 
 # Intents without which Puryfier cannot enforce the lock anymore. They are the
@@ -461,19 +467,32 @@ def automation_catalog() -> AutomationCatalogSchema:
                 ),
             ),
             AutomationEventCatalogSchema(
-                type=EVENT_PURYFI_STATE_CHANGED,
-                label="PuryFi state changed",
+                type=EVENT_PURYFI_ENABLED,
+                label="PuryFi enabled",
+                description="Runs when PuryFi is enabled.",
+            ),
+            AutomationEventCatalogSchema(
+                type=EVENT_PURYFI_DISABLED,
+                label="PuryFi disabled",
                 description=(
-                    "Runs when PuryFi reports a change to its enabled or lock "
-                    "state, for example when it is disabled manually."
+                    "Runs when PuryFi is disabled, for example manually while "
+                    "the Chaster lock is frozen."
                 ),
             ),
             AutomationEventCatalogSchema(
-                type=EVENT_PURYFI_USER_CHANGED,
-                label="PuryFi account changed",
+                type=EVENT_PURYFI_LOCKED,
+                label="PuryFi locked",
                 description=(
-                    "Runs when the PuryFi user profile changes. The stored "
-                    "PuryFi profile is updated automatically."
+                    "Runs when PuryFi reports a lock configuration, for "
+                    "example after the lock has been applied."
+                ),
+            ),
+            AutomationEventCatalogSchema(
+                type=EVENT_PURYFI_UNLOCKED,
+                label="PuryFi unlocked",
+                description=(
+                    "Runs when PuryFi reports that its lock configuration is "
+                    "gone, for example after an emergency unlock."
                 ),
             ),
         ],

@@ -10,8 +10,10 @@ from fastapi import WebSocket
 from domain.automation_models import (
     EVENT_PURYFI_CONNECTION_DISCONNECTED,
     EVENT_PURYFI_CONNECTION_READY,
-    EVENT_PURYFI_STATE_CHANGED,
-    EVENT_PURYFI_USER_CHANGED,
+    EVENT_PURYFI_DISABLED,
+    EVENT_PURYFI_ENABLED,
+    EVENT_PURYFI_LOCKED,
+    EVENT_PURYFI_UNLOCKED,
     PURYFI_LOCK_INTENTS,
 )
 from domain.automations.engine import AutomationEngine
@@ -514,14 +516,10 @@ class Connection:
         elif msg_type == "stateChange":
             # Keep the cached profile and PuryFi state in sync. These handlers
             # only touch memory; persistence runs in a supervised task.
-            if self._handle_profile_state_change(payload):
+            self._handle_profile_state_change(payload)
+            for event_type in self._handle_puryfi_state_change(payload):
                 self._record_automation_event(
-                    EVENT_PURYFI_USER_CHANGED,
-                    payload,
-                )
-            if self._handle_puryfi_state_change(payload):
-                self._record_automation_event(
-                    EVENT_PURYFI_STATE_CHANGED,
+                    event_type,
                     {
                         "path": payload.get("path"),
                         "puryfi_enabled": self.puryfi_enabled,
@@ -1031,20 +1029,22 @@ class Connection:
             name="puryfi-profile-retry",
         )
 
-    def _handle_puryfi_state_change(self, payload: dict) -> bool:
+    def _handle_puryfi_state_change(self, payload: dict) -> list[str]:
         """Update the cached enabled/lock state reported by PuryFi.
 
-        Returns True when the cached value actually changed, so the same
-        protocol message can feed the automation engine.
+        Returns the specific events for every value that actually changed, so
+        the same protocol message can feed the automation engine.
         """
         path = payload.get("path")
         value = payload.get("value")
-        changed = False
+        events: list[str] = []
 
         if path == "enabled" and isinstance(value, bool):
             if value != self.puryfi_enabled:
                 self.puryfi_enabled = value
-                changed = True
+                events.append(
+                    EVENT_PURYFI_ENABLED if value else EVENT_PURYFI_DISABLED
+                )
                 if (
                     not value
                     and getattr(self.session, "chaster_frozen", False)
@@ -1059,11 +1059,13 @@ class Connection:
             has_lock = isinstance(value, dict)
             if has_lock != self.puryfi_has_lock:
                 self.puryfi_has_lock = has_lock
-                changed = True
+                events.append(
+                    EVENT_PURYFI_LOCKED if has_lock else EVENT_PURYFI_UNLOCKED
+                )
 
-        if changed:
+        if events:
             self._spawn(self._publish_status(), name="puryfi-state-publish")
-        return changed
+        return events
 
     def _handle_profile_state_change(self, payload: dict) -> bool:
         """Update the cached profile when PuryFi reports a ``user`` change."""

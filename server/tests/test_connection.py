@@ -685,7 +685,7 @@ class TestPuryfiProtocolEvents:
 
         run(scenario())
 
-    def test_state_change_emits_state_event(self):
+    def test_disabled_state_change_emits_disabled_event(self):
         async def scenario():
             connection, _, engine = make_event_connection(frozen=True)
             connection.ready = True
@@ -700,7 +700,7 @@ class TestPuryfiProtocolEvents:
             )
 
             assert [event[0] for event in engine.events] == [
-                "puryfi.state.changed"
+                "puryfi.disabled"
             ]
             _, payload, context = (
                 engine.events[0][0],
@@ -713,7 +713,69 @@ class TestPuryfiProtocolEvents:
 
         run(scenario())
 
-    def test_user_state_change_emits_user_event_and_updates_profile(self):
+    def test_enabled_state_change_emits_enabled_event(self):
+        async def scenario():
+            connection, _, engine = make_event_connection()
+            connection.ready = True
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {"path": "enabled", "value": True},
+                    }
+                )
+            )
+
+            assert [event[0] for event in engine.events] == [
+                "puryfi.enabled"
+            ]
+            assert engine.events[0][1]["puryfi_enabled"] is True
+            await connection.stop()
+
+        run(scenario())
+
+    def test_lock_configuration_change_emits_locked_and_unlocked_events(self):
+        async def scenario():
+            connection, _, engine = make_event_connection()
+            connection.ready = True
+
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {
+                            "path": "lockConfiguration",
+                            "value": {"password": "secret"},
+                        },
+                    }
+                )
+            )
+            await connection.handle_message(
+                msgpack.packb(
+                    {
+                        "type": "stateChange",
+                        "payload": {
+                            "path": "lockConfiguration",
+                            "value": None,
+                        },
+                    }
+                )
+            )
+
+            assert [event[0] for event in engine.events] == [
+                "puryfi.locked",
+                "puryfi.unlocked",
+            ]
+            assert [event[1]["puryfi_has_lock"] for event in engine.events] == [
+                True,
+                False,
+            ]
+            await connection.stop()
+
+        run(scenario())
+
+    def test_user_state_change_updates_profile_without_emitting_an_event(self):
         async def scenario():
             connection, _, engine = make_event_connection()
             connection.ready = True
@@ -739,9 +801,7 @@ class TestPuryfiProtocolEvents:
                 lambda: connection.session.puryfi_username == "alice"
             )
 
-            assert [event[0] for event in engine.events] == [
-                "puryfi.user.changed"
-            ]
+            assert engine.events == []
             assert connection.session.puryfi_username == "alice"
             await connection.stop()
 
