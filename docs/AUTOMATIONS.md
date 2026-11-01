@@ -146,6 +146,12 @@ and warn when PuryFi is disabled while frozen. The PuryFi profile itself is
 always updated automatically, but account changes do not emit automation
 events.
 
+In the extension UI, the **Automations** tab is split into **My automations**
+and **Templates**. My automations can be searched, filtered by status, owner
+and trigger source, and sorted by last update, creation date or name. Templates
+are grouped into synchronization, media/punishment and alert categories, and
+carry `puryfi` / `chaster` tags that can be combined with a text search.
+
 ### Label artwork
 
 The configuration editor uses PuryFi's body-part artwork from
@@ -239,7 +245,6 @@ choice for the whole lock.
 | PATCH | `/api/configuration/{token}/automations/{id}` |
 | DELETE | `/api/configuration/{token}/automations/{id}` |
 | POST | `/api/configuration/{token}/automations/{id}/duplicate` |
-| POST | `/api/configuration/{token}/automations/{id}/test` |
 | POST | `/api/configuration/{token}/automations/migrate` |
 | GET | `/api/session/{main_token}/automations` |
 | GET | `/api/session/{main_token}/automations/catalog` |
@@ -247,7 +252,6 @@ choice for the whole lock.
 | PATCH | `/api/session/{main_token}/automations/{id}` |
 | DELETE | `/api/session/{main_token}/automations/{id}` |
 | POST | `/api/session/{main_token}/automations/{id}/duplicate` |
-| POST | `/api/session/{main_token}/automations/{id}/test` |
 | PUT | `/api/session/{main_token}/permissions` |
 
 ---

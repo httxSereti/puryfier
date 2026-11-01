@@ -258,8 +258,10 @@ wearer cannot.
 
 The extension main page has three tabs: **Home** (live connection and automation summary),
 **Automations** (full rule list, editing and recent activity), and **Settings** (non-legacy
-permissions such as `wearer_can_control` and `wearer_can_manage`). Legacy freeze and media
-switches stay on the extension configuration page.
+permissions such as `wearer_can_control` and `wearer_can_manage`). The Automations tab is
+split into **My automations** and **Templates**; automations can be searched, filtered and
+sorted, while templates are grouped by category and tagged with `puryfi` / `chaster`.
+Legacy freeze and media switches stay on the extension configuration page.
 
 See [`docs/AUTOMATIONS.md`](docs/AUTOMATIONS.md) for the rule schema, API, permissions and execution details.
 

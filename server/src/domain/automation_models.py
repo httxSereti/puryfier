@@ -285,12 +285,6 @@ class AutomationDuplicateSchema(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
 
 
-class AutomationTestSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event: dict[str, Any] | None = None
-
-
 class AutomationActionParamCatalogSchema(BaseModel):
     key: str
     label: str
@@ -391,12 +385,6 @@ class AutomationListSchema(BaseModel):
     archived_automations: list[AutomationSchema] = Field(default_factory=list)
     targets: list[AutomationTargetSchema] = Field(default_factory=list)
     executions: list[AutomationExecutionSchema] = Field(default_factory=list)
-
-
-class AutomationTestResultSchema(BaseModel):
-    matched: bool
-    reason: str | None = None
-    actions: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def label_catalog() -> list[AutomationLabelCatalogSchema]:

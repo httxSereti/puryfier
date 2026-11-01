@@ -1,7 +1,6 @@
 import {
     Archive,
     Copy,
-    FlaskConical,
     Pencil,
     Power,
     Trash2,
@@ -27,7 +26,6 @@ interface AutomationCardProps {
     onEdit?: (automation: AutomationSchema) => void;
     onDuplicate?: (automation: AutomationSchema) => void;
     onDelete?: (automation: AutomationSchema) => void;
-    onTest?: (automation: AutomationSchema) => void;
 }
 
 export default function AutomationCard({
@@ -38,7 +36,6 @@ export default function AutomationCard({
     onEdit,
     onDuplicate,
     onDelete,
-    onTest,
 }: AutomationCardProps) {
     const archived = automation.status === "archived";
     const disabledByKeyholder =
@@ -164,19 +161,6 @@ export default function AutomationCard({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-white/[0.05] pt-3">
-                {onTest ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => onTest(automation)}
-                        className="h-8 text-xs text-slate-400 hover:text-cyan-200"
-                    >
-                        <FlaskConical />
-                        Test
-                    </Button>
-                ) : null}
                 {automation.can_edit && onEdit ? (
                     <Button
                         type="button"

@@ -441,28 +441,6 @@ class TestAutomationApi:
             "chaster.log"
         ]
 
-    def test_test_endpoint_returns_a_dry_run_result(
-        self, client, seed_lock_configuration, mock_chaster_api
-    ):
-        seed_automation_session(seed_lock_configuration)
-        mock_chaster_api(
-            make_configuration_response(
-                role="keyholder", session_id=SESSION_ID
-            )
-        )
-        created = client.post(
-            "/api/configuration/config-token/automations",
-            json=automation_payload(),
-        )
-        automation_id = created.json()["id"]
-
-        response = client.post(
-            f"/api/configuration/config-token/automations/{automation_id}/test",
-            json={},
-        )
-        assert response.status_code == 200, response.text
-        assert response.json()["matched"] is True
-
     def test_session_endpoint_lists_rules(
         self, client, seed_lock_configuration, mock_chaster_api
     ):

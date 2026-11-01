@@ -7,6 +7,25 @@ import type {
 
 import { formatDuration } from "./format";
 
+export type AutomationStatusFilter = "all" | "active" | "disabled";
+export type AutomationOwnerFilter = "all" | "mine" | "keyholder" | "wearer";
+export type AutomationSourceFilter = "all" | "chaster" | "puryfi";
+export type AutomationSort = "updated" | "created" | "name";
+
+export interface AutomationFilters {
+    query: string;
+    status: AutomationStatusFilter;
+    owner: AutomationOwnerFilter;
+    source: AutomationSourceFilter;
+}
+
+export const DEFAULT_AUTOMATION_FILTERS: AutomationFilters = {
+    query: "",
+    status: "all",
+    owner: "all",
+    source: "all",
+};
+
 const EVENT_LABELS: Record<string, string> = {
     "chaster.session.joined": "the user joins the lock",
     "chaster.session.left": "the user leaves the lock",
@@ -193,4 +212,105 @@ export function automationActionsSummary(automation: AutomationSchema): string {
 
 export function automationTitle(automation: AutomationSchema): string {
     return automation.name;
+}
+
+function searchTokens(query: string): string[] {
+    return query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+}
+
+export function automationSearchText(
+    automation: AutomationSchema,
+    labels: Record<string, string>,
+): string {
+    return [
+        automation.name,
+        automation.lock_label ?? "",
+        automation.owner_role,
+        automation.trigger.event,
+        ...automation.actions.map((action) => action.type),
+        triggerSummary(automation.trigger, labels),
+        automationActionsSummary(automation),
+    ]
+        .join(" ")
+        .toLocaleLowerCase();
+}
+
+export function matchesAutomationFilters(
+    automation: AutomationSchema,
+    filters: AutomationFilters,
+    labels: Record<string, string>,
+): boolean {
+    if (filters.status === "active" && !automation.enabled) return false;
+    if (filters.status === "disabled" && automation.enabled) return false;
+
+    if (filters.owner === "mine" && !automation.is_owner) return false;
+    if (
+        (filters.owner === "keyholder" || filters.owner === "wearer") &&
+        automation.owner_role !== filters.owner
+    ) {
+        return false;
+    }
+
+    if (
+        filters.source !== "all" &&
+        !automation.trigger.event.startsWith(`${filters.source}.`)
+    ) {
+        return false;
+    }
+
+    const tokens = searchTokens(filters.query);
+    if (tokens.length === 0) return true;
+
+    const haystack = automationSearchText(automation, labels);
+    return tokens.every((token) => haystack.includes(token));
+}
+
+function timestamp(value: string | null | undefined): number {
+    if (!value) return 0;
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function sortAutomations(
+    automations: AutomationSchema[],
+    sort: AutomationSort,
+): AutomationSchema[] {
+    const sorted = [...automations];
+
+    if (sort === "name") {
+        return sorted.sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+        );
+    }
+
+    if (sort === "created") {
+        return sorted.sort(
+            (a, b) =>
+                timestamp(b.created_at) - timestamp(a.created_at) ||
+                a.name.localeCompare(b.name),
+        );
+    }
+
+    return sorted.sort((a, b) => {
+        const updated = timestamp(b.updated_at) - timestamp(a.updated_at);
+        if (updated !== 0) return updated;
+        return (
+            timestamp(b.created_at) - timestamp(a.created_at) ||
+            a.name.localeCompare(b.name)
+        );
+    });
+}
+
+export function filterAndSortAutomations(
+    automations: AutomationSchema[],
+    filters: AutomationFilters,
+    labels: Record<string, string>,
+    sort: AutomationSort,
+): AutomationSchema[] {
+    return sortAutomations(
+        automations.filter((automation) =>
+            matchesAutomationFilters(automation, filters, labels),
+        ),
+        sort,
+    );
 }

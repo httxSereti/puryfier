@@ -4,7 +4,6 @@ import type {
     AutomationLimitsSchema,
     AutomationListSchema,
     AutomationSchema,
-    AutomationTestResultSchema,
 } from "@/types/api";
 
 import { apiClient } from "./client";
@@ -153,30 +152,6 @@ export async function duplicateSessionAutomation(
     const { data } = await apiClient.post<AutomationSchema>(
         `${sessionPath(mainToken)}/${encodeURIComponent(automationId)}/duplicate`,
         { target_session_id: targetSessionId, name },
-    );
-    return data;
-}
-
-export async function testAutomation(
-    configurationToken: string,
-    automationId: string,
-    event?: Record<string, unknown> | null,
-): Promise<AutomationTestResultSchema> {
-    const { data } = await apiClient.post<AutomationTestResultSchema>(
-        `${configurationPath(configurationToken)}/${encodeURIComponent(automationId)}/test`,
-        { event: event ?? null },
-    );
-    return data;
-}
-
-export async function testSessionAutomation(
-    mainToken: string,
-    automationId: string,
-    event?: Record<string, unknown> | null,
-): Promise<AutomationTestResultSchema> {
-    const { data } = await apiClient.post<AutomationTestResultSchema>(
-        `${sessionPath(mainToken)}/${encodeURIComponent(automationId)}/test`,
-        { event: event ?? null },
     );
     return data;
 }

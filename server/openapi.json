@@ -693,67 +693,6 @@
         }
       }
     },
-    "/api/session/{main_token}/automations/{automation_id}/test": {
-      "post": {
-        "tags": [
-          "automations"
-        ],
-        "summary": "Test Session Automation",
-        "operationId": "test_session_automation_api_session__main_token__automations__automation_id__test_post",
-        "parameters": [
-          {
-            "name": "automation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Automation Id"
-            }
-          },
-          {
-            "name": "main_token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Main Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutomationTestSchema"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationTestResultSchema"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/configuration/{configuration_token}/automations/{automation_id}": {
       "patch": {
         "tags": [
@@ -901,67 +840,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AutomationSchema"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/configuration/{configuration_token}/automations/{automation_id}/test": {
-      "post": {
-        "tags": [
-          "automations"
-        ],
-        "summary": "Test Configuration Automation",
-        "operationId": "test_configuration_automation_api_configuration__configuration_token__automations__automation_id__test_post",
-        "parameters": [
-          {
-            "name": "automation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Automation Id"
-            }
-          },
-          {
-            "name": "configuration_token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Configuration Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutomationTestSchema"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationTestResultSchema"
                 }
               }
             }
@@ -1764,57 +1642,6 @@
           "role"
         ],
         "title": "AutomationTargetSchema"
-      },
-      "AutomationTestResultSchema": {
-        "properties": {
-          "matched": {
-            "type": "boolean",
-            "title": "Matched"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "actions": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Actions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "matched"
-        ],
-        "title": "AutomationTestResultSchema"
-      },
-      "AutomationTestSchema": {
-        "properties": {
-          "event": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Event"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "AutomationTestSchema"
       },
       "AutomationTriggerSchema": {
         "properties": {

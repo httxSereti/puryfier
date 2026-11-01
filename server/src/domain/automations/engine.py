@@ -495,30 +495,6 @@ class AutomationEngine:
 
         return executions
 
-    async def test_rule(
-        self,
-        session: LockSession,
-        rule: AutomationCreateSchema,
-        event: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        compiled = self._compile_schema(rule, session_id=session.session_id)
-        payload = event or self._sample_event(compiled.trigger)
-        context = {
-            "chaster_frozen": bool(
-                getattr(session, "chaster_frozen", False)
-            ),
-            # Live PuryFi state is not persisted: a dry run only knows the
-            # Chaster side and must not pretend the plugin state is known.
-            "puryfi_enabled": None,
-            "puryfi_has_lock": None,
-        }
-        matched = self._matches(compiled.trigger, payload, context)
-        return {
-            "matched": matched,
-            "reason": None if matched else "The sample event does not satisfy the conditions.",
-            "actions": [action.model_dump(mode="json") for action in compiled.actions],
-        }
-
     # ------------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------------
@@ -648,38 +624,6 @@ class AutomationEngine:
             return False
         self._daily_counts[key] = (today, count + 1)
         return True
-
-    @staticmethod
-    def _sample_event(trigger: AutomationTriggerSchema) -> dict[str, Any]:
-        labels: list[str] = []
-        score = 1.0
-        object_count = 1
-        for condition in trigger.conditions:
-            if condition.field == "labels":
-                values = (
-                    condition.value
-                    if isinstance(condition.value, list)
-                    else [condition.value]
-                )
-                labels.extend(str(value) for value in values)
-            elif condition.field == "score":
-                try:
-                    score = float(condition.value)
-                except (TypeError, ValueError):
-                    pass
-            elif condition.field == "object_count":
-                try:
-                    object_count = int(condition.value)
-                except (TypeError, ValueError):
-                    pass
-        return {
-            "labels": labels,
-            "max_score": score,
-            "object_count": object_count,
-            "objects": [
-                {"label": 0, "score": score} for _ in range(max(1, object_count))
-            ],
-        }
 
     # ------------------------------------------------------------------
     # Trigger + persistence

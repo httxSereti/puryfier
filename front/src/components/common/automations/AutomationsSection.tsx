@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Plus, Sparkles, Trash2, X } from "lucide-react";
+import {
+    Copy,
+    LayoutTemplate,
+    ListChecks,
+    Plus,
+    SearchX,
+    Sparkles,
+    Trash2,
+    X,
+} from "lucide-react";
 
 import AutomationActivity from "@/components/common/automations/AutomationActivity";
 import AutomationCard from "@/components/common/automations/AutomationCard";
 import AutomationEditor from "@/components/common/automations/AutomationEditor";
 import AutomationTemplates from "@/components/common/automations/AutomationTemplates";
+import AutomationToolbar from "@/components/common/automations/AutomationToolbar";
 import ErrorAlert from "@/components/ui/error-alert";
 import SectionCard from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
+import Tabs from "@/components/ui/tabs";
+import type { TabItem } from "@/components/ui/tabs";
 import {
     createAutomation,
     createSessionAutomation,
@@ -19,19 +31,21 @@ import {
     fetchAutomations,
     fetchSessionAutomationCatalog,
     fetchSessionAutomations,
-    testAutomation,
-    testSessionAutomation,
     updateAutomation,
     updateSessionAutomation,
 } from "@/lib/http/automations";
-import { FALLBACK_LABELS } from "@/lib/automations";
+import {
+    DEFAULT_AUTOMATION_FILTERS,
+    FALLBACK_LABELS,
+    filterAndSortAutomations,
+} from "@/lib/automations";
+import type { AutomationFilters, AutomationSort } from "@/lib/automations";
 import { getApiErrorMessage } from "@/lib/errors";
 import type {
     AutomationCatalogSchema,
     AutomationCreateSchema,
     AutomationListSchema,
     AutomationSchema,
-    AutomationTestResultSchema,
 } from "@/types/api";
 
 interface AutomationsSectionProps {
@@ -39,6 +53,13 @@ interface AutomationsSectionProps {
     mainToken?: string;
     onChanged?: () => void;
 }
+
+type AutomationsView = "mine" | "templates";
+
+const VIEW_TABS: TabItem[] = [
+    { value: "mine", label: "My automations", icon: <ListChecks /> },
+    { value: "templates", label: "Templates", icon: <LayoutTemplate /> },
+];
 
 export default function AutomationsSection({
     configurationToken,
@@ -58,10 +79,17 @@ export default function AutomationsSection({
     const [duplicateSource, setDuplicateSource] = useState<AutomationSchema | null>(null);
     const [duplicateTarget, setDuplicateTarget] = useState("");
     const [deleteSource, setDeleteSource] = useState<AutomationSchema | null>(null);
-    const [testResult, setTestResult] = useState<{
-        name: string;
-        result: AutomationTestResultSchema;
-    } | null>(null);
+
+    const [view, setView] = useState<AutomationsView>("mine");
+    const [filters, setFilters] = useState<AutomationFilters>({
+        ...DEFAULT_AUTOMATION_FILTERS,
+    });
+    const [sort, setSort] = useState<AutomationSort>("updated");
+
+    const resetFilters = () => {
+        setFilters({ ...DEFAULT_AUTOMATION_FILTERS });
+        setSort("updated");
+    };
 
     const load = useCallback(async () => {
         try {
@@ -124,6 +152,7 @@ export default function AutomationsSection({
     };
 
     const handleSave = async (payload: AutomationCreateSchema) => {
+        const isNew = !(editing && "id" in editing);
         await run(async () => {
             if (editing && "id" in editing) {
                 if (isSession) {
@@ -138,6 +167,10 @@ export default function AutomationsSection({
             }
             setEditorOpen(false);
             setEditing(null);
+            if (isNew) {
+                setView("mine");
+                resetFilters();
+            }
         });
     };
 
@@ -189,25 +222,20 @@ export default function AutomationsSection({
         });
     };
 
-    const handleTest = async (automation: AutomationSchema) => {
-        setBusy(true);
-        setError(null);
-        try {
-            const result = isSession
-                ? await testSessionAutomation(token, automation.id)
-                : await testAutomation(token, automation.id);
-            setTestResult({ name: automation.name, result });
-        } catch (cause) {
-            setError(getApiErrorMessage(cause, "Could not test this automation."));
-        } finally {
-            setBusy(false);
-        }
-    };
-
     const active = data?.automations ?? [];
     const archived = data?.archived_automations ?? [];
     const canManage = Boolean(
         data && (data.role === "keyholder" || data.effective_wearer_can_manage),
+    );
+    const visibleAutomations = useMemo(
+        () =>
+            filterAndSortAutomations(
+                data?.automations ?? [],
+                filters,
+                labelNames,
+                sort,
+            ),
+        [data, filters, labelNames, sort],
     );
 
     return (
@@ -234,124 +262,182 @@ export default function AutomationsSection({
                     ) : null
                 }
             >
-                {error ? (
-                    <ErrorAlert message={error} onRetry={load} />
-                ) : isLoading ? (
-                    <p className="px-1 py-4 text-xs text-slate-500">Loading automations…</p>
-                ) : active.length === 0 ? (
-                    <div className="space-y-3">
-                        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-4 text-center">
-                            <p className="text-sm font-medium text-slate-300">
-                                No automations yet
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                                {canManage
-                                    ? "Start from a template or create your own rule."
-                                    : "You do not have permission to create automations for this lock."}
-                            </p>
+                <div className="flex flex-col gap-4">
+                    <Tabs
+                        items={VIEW_TABS}
+                        value={view}
+                        onChange={(value) => {
+                            if (value === "mine" || value === "templates") {
+                                setView(value);
+                            }
+                        }}
+                        ariaLabel="Automation views"
+                        className="sm:w-fit"
+                    />
+
+                    {view === "mine" ? (
+                        <div
+                            role="tabpanel"
+                            aria-label="My automations"
+                            className="flex flex-col gap-3"
+                        >
+                            {error ? (
+                                <ErrorAlert message={error} onRetry={load} />
+                            ) : isLoading ? (
+                                <p className="px-1 py-4 text-xs text-slate-500">
+                                    Loading automations…
+                                </p>
+                            ) : active.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-5 text-center">
+                                    <p className="text-sm font-medium text-slate-300">
+                                        No automations yet
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        {canManage
+                                            ? "Start from a template or create your own rule."
+                                            : "You do not have permission to create automations for this lock."}
+                                    </p>
+                                    {canManage ? (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setView("templates")}
+                                            className="mt-3 border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                                        >
+                                            <LayoutTemplate />
+                                            Browse templates
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            ) : (
+                                <>
+                                    <AutomationToolbar
+                                        filters={filters}
+                                        sort={sort}
+                                        resultCount={visibleAutomations.length}
+                                        totalCount={active.length}
+                                        onFiltersChange={setFilters}
+                                        onSortChange={setSort}
+                                        onReset={resetFilters}
+                                    />
+
+                                    {visibleAutomations.length === 0 ? (
+                                        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-7 text-center">
+                                            <SearchX className="mx-auto size-5 text-slate-500" />
+                                            <p className="mt-2 text-sm font-medium text-slate-300">
+                                                No automations match your filters
+                                            </p>
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                Adjust the search or filters to see more
+                                                rules.
+                                            </p>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={resetFilters}
+                                                className="mt-3 text-slate-300 hover:text-white"
+                                            >
+                                                Reset filters
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col gap-2.5">
+                                            {visibleAutomations.map((automation) => (
+                                                <AutomationCard
+                                                    key={automation.id}
+                                                    automation={automation}
+                                                    labelNames={labelNames}
+                                                    busy={busy}
+                                                    onToggle={handleToggle}
+                                                    onEdit={(rule) => {
+                                                        setEditing(rule);
+                                                        setEditorOpen(true);
+                                                    }}
+                                                    onDuplicate={(rule) => {
+                                                        setDuplicateSource(rule);
+                                                        setDuplicateTarget(
+                                                            data?.targets?.[0]
+                                                                ?.session_id ?? "",
+                                                        );
+                                                    }}
+                                                    onDelete={handleDelete}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
-                        {canManage ? (
-                            <AutomationTemplates
-                                onSelect={(payload) => {
-                                    setEditing(payload);
-                                    setEditorOpen(true);
-                                }}
-                            />
-                        ) : null}
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-2.5">
-                        {active.map((automation) => (
-                            <AutomationCard
-                                key={automation.id}
-                                automation={automation}
-                                labelNames={labelNames}
-                                busy={busy}
-                                onToggle={handleToggle}
-                                onEdit={(rule) => {
-                                    setEditing(rule);
-                                    setEditorOpen(true);
-                                }}
-                                onDuplicate={(rule) => {
-                                    setDuplicateSource(rule);
-                                    setDuplicateTarget(data?.targets?.[0]?.session_id ?? "");
-                                }}
-                                onDelete={handleDelete}
-                                onTest={handleTest}
-                            />
-                        ))}
-                        {canManage ? (
-                            <div className="pt-1">
+                    ) : (
+                        <div
+                            role="tabpanel"
+                            aria-label="Templates"
+                            className="flex flex-col gap-3"
+                        >
+                            {error ? (
+                                <ErrorAlert message={error} onRetry={load} />
+                            ) : isLoading ? (
+                                <p className="px-1 py-4 text-xs text-slate-500">
+                                    Loading templates…
+                                </p>
+                            ) : canManage ? (
                                 <AutomationTemplates
                                     onSelect={(payload) => {
                                         setEditing(payload);
                                         setEditorOpen(true);
                                     }}
                                 />
-                            </div>
-                        ) : null}
-                    </div>
-                )}
-            </SectionCard>
-
-            {testResult ? (
-                <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.05] p-4">
-                    <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <p className="text-sm font-semibold text-cyan-100">
-                                Test: {testResult.name}
-                            </p>
-                            <p className="mt-1 text-xs text-cyan-100/70">
-                                {testResult.result.matched
-                                    ? `This rule would run ${(testResult.result.actions ?? []).length} action(s).`
-                                    : testResult.result.reason ?? "This rule would not run."}
-                            </p>
+                            ) : (
+                                <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-5 text-center text-xs text-slate-500">
+                                    You do not have permission to create automations
+                                    for this lock.
+                                </p>
+                            )}
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setTestResult(null)}
-                            aria-label="Close test result"
-                            className="text-cyan-200/60 hover:text-cyan-100"
-                        >
-                            <X className="size-4" />
-                        </button>
-                    </div>
+                    )}
                 </div>
-            ) : null}
-
-            {archived.length > 0 ? (
-                <SectionCard
-                    icon={<Copy />}
-                    title="Archived automations"
-                    description="Kept for 30 days. Duplicate one into another lock."
-                    accent="neutral"
-                >
-                    <div className="flex flex-col gap-2.5">
-                        {archived.map((automation) => (
-                            <AutomationCard
-                                key={automation.id}
-                                automation={automation}
-                                labelNames={labelNames}
-                                busy={busy}
-                                onDuplicate={(rule) => {
-                                    setDuplicateSource(rule);
-                                    setDuplicateTarget(data?.targets?.[0]?.session_id ?? "");
-                                }}
-                                onTest={handleTest}
-                            />
-                        ))}
-                    </div>
-                </SectionCard>
-            ) : null}
-
-            <SectionCard
-                icon={<Sparkles />}
-                title="Recent activity"
-                description="The latest automation runs for this lock."
-                accent="violet"
-            >
-                <AutomationActivity executions={data?.executions ?? []} />
             </SectionCard>
+
+            {view === "mine" && !error && !isLoading ? (
+                <>
+                    {archived.length > 0 ? (
+                        <SectionCard
+                            icon={<Copy />}
+                            title="Archived automations"
+                            description="Kept for 30 days. Duplicate one into another lock."
+                            accent="neutral"
+                        >
+                            <div className="flex flex-col gap-2.5">
+                                {archived.map((automation) => (
+                                    <AutomationCard
+                                        key={automation.id}
+                                        automation={automation}
+                                        labelNames={labelNames}
+                                        busy={busy}
+                                        onDuplicate={(rule) => {
+                                            setDuplicateSource(rule);
+                                            setDuplicateTarget(
+                                                data?.targets?.[0]?.session_id ?? "",
+                                            );
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        </SectionCard>
+                    ) : null}
+
+                    <SectionCard
+                        icon={<Sparkles />}
+                        title="Recent activity"
+                        description="The latest automation runs for this lock."
+                        accent="violet"
+                    >
+                        <AutomationActivity executions={data?.executions ?? []} />
+                    </SectionCard>
+                </>
+            ) : null}
 
             {editorOpen ? (
                 <AutomationEditor

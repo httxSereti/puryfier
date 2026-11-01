@@ -20,7 +20,6 @@ export type AutomationListSchema = components["schemas"]["AutomationListSchema"]
 export type AutomationPermissionsSchema = components["schemas"]["AutomationPermissionsSchema"];
 export type AutomationSchema = components["schemas"]["AutomationSchema"];
 export type AutomationTargetSchema = components["schemas"]["AutomationTargetSchema"];
-export type AutomationTestResultSchema = components["schemas"]["AutomationTestResultSchema"];
 export type AutomationTriggerSchema = components["schemas"]["AutomationTriggerSchema"];
 export type AutomationUpdateSchema = components["schemas"]["AutomationUpdateSchema"];
 export type CensorPicsConfigSchema = components["schemas"]["CensorPicsConfigSchema"];

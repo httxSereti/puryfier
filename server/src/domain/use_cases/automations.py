@@ -22,7 +22,6 @@ from domain.automation_models import (
     AutomationListSchema,
     AutomationSchema,
     AutomationTargetSchema,
-    AutomationTestResultSchema,
     AutomationTriggerSchema,
     AutomationUpdateSchema,
 )
@@ -653,34 +652,3 @@ async def migrate_legacy(
     return [_rule_schema(rule, actor) for rule in created]
 
 
-async def test_automation(
-    session: LockSession,
-    *,
-    role: str,
-    automation_id: str,
-    event: dict[str, Any] | None,
-    automations: AutomationRepository,
-    engine: AutomationEngine,
-) -> AutomationTestResultSchema:
-    actor = resolve_actor(session, role)
-    rule = await automations.get(automation_id)
-    if rule is None:
-        raise SessionNotFoundError("Automation not found")
-    if rule.session_id != session.session_id and not (
-        rule.status == "archived" and rule.owner_id == actor.owner_id
-    ):
-        raise SessionNotFoundError("Automation not found")
-
-    schema = AutomationCreateSchema(
-        name=rule.name,
-        enabled=rule.enabled,
-        priority=rule.priority,
-        trigger=AutomationTriggerSchema.model_validate(rule.trigger),
-        actions=[
-            AutomationActionSchema.model_validate(action)
-            for action in rule.actions
-        ],
-        limits=AutomationLimitsSchema.model_validate(rule.limits or {}),
-    )
-    result = await engine.test_rule(session, schema, event)
-    return AutomationTestResultSchema(**result)

@@ -22,8 +22,6 @@ from domain.automation_models import (
     AutomationDuplicateSchema,
     AutomationListSchema,
     AutomationSchema,
-    AutomationTestResultSchema,
-    AutomationTestSchema,
     AutomationUpdateSchema,
     automation_catalog,
 )
@@ -36,7 +34,6 @@ from domain.use_cases.automations import (
     duplicate_automation,
     list_automations,
     migrate_legacy,
-    test_automation,
     update_automation,
 )
 
@@ -310,29 +307,6 @@ async def duplicate_session_automation(
 
 
 @router.post(
-    "/session/{main_token}/automations/{automation_id}/test",
-    response_model=AutomationTestResultSchema,
-)
-async def test_session_automation(
-    automation_id: str,
-    payload: AutomationTestSchema,
-    context: AutomationContext = Depends(get_session_context),
-    container: Container = Depends(get_container),
-):
-    try:
-        return await test_automation(
-            context.session,
-            role=context.role,
-            automation_id=automation_id,
-            event=payload.event,
-            automations=container.automation_repository,
-            engine=container.automation_engine,
-        )
-    except Exception as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
     "/configuration/{configuration_token}/automations",
     response_model=AutomationSchema,
     status_code=status.HTTP_201_CREATED,
@@ -435,29 +409,6 @@ async def duplicate_configuration_automation(
             automations=container.automation_repository,
             sessions=container.session_repository,
             puryfi=puryfi,
-            engine=container.automation_engine,
-        )
-    except Exception as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/configuration/{configuration_token}/automations/{automation_id}/test",
-    response_model=AutomationTestResultSchema,
-)
-async def test_configuration_automation(
-    automation_id: str,
-    payload: AutomationTestSchema,
-    context: AutomationContext = Depends(get_configuration_context),
-    container: Container = Depends(get_container),
-):
-    try:
-        return await test_automation(
-            context.session,
-            role=context.role,
-            automation_id=automation_id,
-            event=payload.event,
-            automations=container.automation_repository,
             engine=container.automation_engine,
         )
     except Exception as exc:

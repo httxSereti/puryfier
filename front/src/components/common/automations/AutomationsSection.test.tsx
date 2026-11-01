@@ -32,8 +32,6 @@ vi.mock("@/lib/http/automations", () => ({
     fetchAutomations: vi.fn(),
     fetchSessionAutomationCatalog: vi.fn(),
     fetchSessionAutomations: vi.fn(),
-    testAutomation: vi.fn(),
-    testSessionAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     updateSessionAutomation: vi.fn(),
 }));
@@ -48,6 +46,17 @@ const fetchSessionCatalogMock = vi.mocked(fetchSessionAutomationCatalog);
 const updateSessionAutomationMock = vi.mocked(updateSessionAutomation);
 const createSessionAutomationMock = vi.mocked(createSessionAutomation);
 const deleteSessionAutomationMock = vi.mocked(deleteSessionAutomation);
+
+function makeTrigger(event: string): AutomationSchema["trigger"] {
+    return {
+        event,
+        conditions: [],
+        min_score: 0,
+        count: 1,
+        window_seconds: 0,
+        count_mode: "images",
+    };
+}
 
 function makeAutomation(overrides: Partial<AutomationSchema> = {}): AutomationSchema {
     return {
@@ -147,7 +156,9 @@ describe("AutomationsSection", () => {
         render(<AutomationsSection configurationToken="config-token" />);
 
         expect(await screen.findByText("Lock on freeze")).toBeInTheDocument();
-        expect(screen.getByText("Active")).toBeInTheDocument();
+        const card = screen.getByText("Lock on freeze").closest("article");
+        expect(card).not.toBeNull();
+        expect(within(card as HTMLElement).getByText("Active")).toBeInTheDocument();
 
         await user.click(
             screen.getByRole("switch", { name: "Disable Lock on freeze" }),
@@ -237,8 +248,10 @@ describe("AutomationsSection", () => {
             }),
         );
 
-        const selects = screen.getAllByRole("combobox");
-        await user.selectOptions(selects[selects.length - 1], "hide");
+        await user.selectOptions(
+            screen.getByRole("combobox", { name: "Remaining time visibility" }),
+            "hide",
+        );
 
         await user.click(
             screen.getByRole("button", { name: "Save automation" }),
@@ -278,7 +291,7 @@ describe("AutomationsSection", () => {
         await screen.findByText("Lock on freeze");
         await user.click(screen.getByRole("button", { name: "New automation" }));
         await user.selectOptions(
-            screen.getByRole("combobox"),
+            screen.getByRole("combobox", { name: "Trigger event" }),
             "puryfi.media.scan",
         );
 
@@ -310,11 +323,20 @@ describe("AutomationsSection", () => {
         );
     });
 
-    it("shows the empty state with templates", async () => {
+    it("opens the template catalog from the empty state", async () => {
+        const user = userEvent.setup();
         fetchAutomationsMock.mockResolvedValue(makeList({ automations: [] }));
         render(<AutomationsSection configurationToken="config-token" />);
 
         expect(await screen.findByText("No automations yet")).toBeInTheDocument();
+        await user.click(
+            screen.getByRole("button", { name: "Browse templates" }),
+        );
+
+        expect(
+            screen.getByRole("tab", { name: "Templates" }),
+        ).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByText("Synchronization")).toBeInTheDocument();
         expect(
             screen.getAllByRole("button", { name: /Eyes and Belly/ }).length,
         ).toBeGreaterThan(0);
@@ -326,6 +348,9 @@ describe("AutomationsSection", () => {
         render(<AutomationsSection configurationToken="config-token" />);
 
         await screen.findByText("No automations yet");
+        await user.click(
+            screen.getByRole("button", { name: "Browse templates" }),
+        );
         await user.click(
             screen.getByRole("button", {
                 name: /Warn when PuryFi disconnects/,
@@ -353,5 +378,231 @@ describe("AutomationsSection", () => {
                 }),
             );
         });
+    });
+
+    it("separates my automations from templates", async () => {
+        const user = userEvent.setup();
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        expect(await screen.findByText("Lock on freeze")).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: /Lock PuryFi on join/ }),
+        ).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole("tab", { name: "Templates" }));
+
+        expect(screen.queryByText("Lock on freeze")).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: /Lock PuryFi on join/ }),
+        ).toBeInTheDocument();
+    });
+
+    it("searches automations by name and trigger text", async () => {
+        const user = userEvent.setup();
+        fetchAutomationsMock.mockResolvedValue(
+            makeList({
+                automations: [
+                    makeAutomation({ id: "auto-1", name: "Lock on freeze" }),
+                    makeAutomation({
+                        id: "auto-2",
+                        name: "Pillory media",
+                        trigger: makeTrigger("puryfi.media.scan"),
+                        actions: [
+                            {
+                                type: "chaster.pillory",
+                                params: { duration: 300 },
+                                on_failure: "stop",
+                            },
+                        ],
+                    }),
+                ],
+            }),
+        );
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Lock on freeze");
+        const search = screen.getByRole("textbox", {
+            name: "Search automations",
+        });
+
+        await user.type(search, "pillory");
+        expect(screen.getByText("Pillory media")).toBeInTheDocument();
+        expect(screen.queryByText("Lock on freeze")).not.toBeInTheDocument();
+
+        await user.clear(search);
+        await user.type(search, "frozen");
+        expect(screen.getByText("Lock on freeze")).toBeInTheDocument();
+        expect(screen.queryByText("Pillory media")).not.toBeInTheDocument();
+    });
+
+    it("filters automations by status, owner and trigger source", async () => {
+        const user = userEvent.setup();
+        fetchAutomationsMock.mockResolvedValue(
+            makeList({
+                automations: [
+                    makeAutomation({
+                        id: "auto-1",
+                        name: "Enabled keyholder",
+                        enabled: true,
+                        is_owner: true,
+                        owner_role: "keyholder",
+                        trigger: makeTrigger("chaster.lock.frozen"),
+                    }),
+                    makeAutomation({
+                        id: "auto-2",
+                        name: "Disabled wearer",
+                        enabled: false,
+                        is_owner: false,
+                        owner_role: "wearer",
+                        trigger: makeTrigger("puryfi.media.scan"),
+                    }),
+                ],
+            }),
+        );
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Enabled keyholder");
+        const status = screen.getByRole("combobox", {
+            name: "Filter by status",
+        });
+        const owner = screen.getByRole("combobox", { name: "Filter by owner" });
+        const source = screen.getByRole("combobox", {
+            name: "Filter by trigger",
+        });
+
+        await user.selectOptions(status, "disabled");
+        expect(screen.getByText("Disabled wearer")).toBeInTheDocument();
+        expect(screen.queryByText("Enabled keyholder")).not.toBeInTheDocument();
+
+        await user.selectOptions(status, "all");
+        await user.selectOptions(owner, "wearer");
+        expect(screen.getByText("Disabled wearer")).toBeInTheDocument();
+        expect(screen.queryByText("Enabled keyholder")).not.toBeInTheDocument();
+
+        await user.selectOptions(owner, "all");
+        await user.selectOptions(source, "puryfi");
+        expect(screen.getByText("Disabled wearer")).toBeInTheDocument();
+        expect(screen.queryByText("Enabled keyholder")).not.toBeInTheDocument();
+    });
+
+    it("sorts automations by name and last update", async () => {
+        const user = userEvent.setup();
+        fetchAutomationsMock.mockResolvedValue(
+            makeList({
+                automations: [
+                    makeAutomation({
+                        id: "auto-1",
+                        name: "Zulu rule",
+                        updated_at: "2026-02-01T00:00:00Z",
+                    }),
+                    makeAutomation({
+                        id: "auto-2",
+                        name: "Alpha rule",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    }),
+                ],
+            }),
+        );
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Zulu rule");
+        const sort = screen.getByRole("combobox", {
+            name: "Sort automations",
+        });
+        const headings = () =>
+            screen
+                .getAllByRole("heading", { level: 3 })
+                .map((heading) => heading.textContent);
+
+        expect(headings()).toEqual(["Zulu rule", "Alpha rule"]);
+
+        await user.selectOptions(sort, "name");
+        expect(headings()).toEqual(["Alpha rule", "Zulu rule"]);
+
+        await user.selectOptions(sort, "updated");
+        expect(headings()).toEqual(["Zulu rule", "Alpha rule"]);
+    });
+
+    it("searches and filters templates by tag", async () => {
+        const user = userEvent.setup();
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Lock on freeze");
+        await user.click(screen.getByRole("tab", { name: "Templates" }));
+
+        expect(screen.getByText("Media & punishments")).toBeInTheDocument();
+
+        const search = screen.getByRole("textbox", { name: "Search templates" });
+        await user.type(search, "pillory");
+        expect(
+            screen.getByRole("button", { name: /Pillory for censored media/ }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: /Lock PuryFi on join/ }),
+        ).not.toBeInTheDocument();
+
+        await user.clear(search);
+        await user.click(screen.getByRole("button", { name: "PuryFi" }));
+
+        expect(
+            screen.getByRole("button", { name: /Lock PuryFi on join/ }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", {
+                name: /Hide the remaining time when frozen/,
+            }),
+        ).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Chaster" }));
+        expect(
+            screen.getByRole("button", { name: /Lock PuryFi on join/ }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", {
+                name: /Hide the remaining time when frozen/,
+            }),
+        ).not.toBeInTheDocument();
+    });
+
+    it("resets automation filters when nothing matches", async () => {
+        const user = userEvent.setup();
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Lock on freeze");
+        await user.type(
+            screen.getByRole("textbox", { name: "Search automations" }),
+            "zzz",
+        );
+
+        expect(
+            screen.getByText("No automations match your filters"),
+        ).toBeInTheDocument();
+        const [reset] = screen.getAllByRole("button", { name: "Reset filters" });
+        await user.click(reset);
+
+        expect(screen.getByText("Lock on freeze")).toBeInTheDocument();
+    });
+
+    it("returns to my automations after saving a template", async () => {
+        const user = userEvent.setup();
+        fetchAutomationsMock.mockResolvedValue(makeList({ automations: [] }));
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("No automations yet");
+        await user.click(
+            screen.getByRole("button", { name: "Browse templates" }),
+        );
+        await user.click(
+            screen.getByRole("button", { name: /Lock PuryFi on join/ }),
+        );
+        await user.click(
+            screen.getByRole("button", { name: "Save automation" }),
+        );
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("tab", { name: "My automations" }),
+            ).toHaveAttribute("aria-selected", "true"),
+        );
     });
 });

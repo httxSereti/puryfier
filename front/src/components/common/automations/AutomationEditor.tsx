@@ -410,6 +410,7 @@ export default function AutomationEditor({
                         <select
                             value={state.event}
                             onChange={(event) => handleEventChange(event.target.value)}
+                            aria-label="Trigger event"
                             className="h-11 w-full rounded-xl border border-white/10 bg-[#0F0E16] px-3 text-sm text-white outline-none focus:border-cyan-400/50 focus:ring-4 focus:ring-cyan-400/10"
                         >
                             <option value="chaster.session.joined">The user joins the lock</option>
@@ -617,6 +618,7 @@ export default function AutomationEditor({
                                             event.target.value === "show",
                                         )
                                     }
+                                    aria-label="Remaining time visibility"
                                     className="h-9 rounded-lg border border-white/10 bg-[#0F0E16] px-3 text-xs text-white outline-none focus:border-cyan-400/50"
                                 >
                                     <option value="show">Show to the wearer</option>
