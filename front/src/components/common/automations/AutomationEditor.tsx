@@ -38,6 +38,14 @@ interface EditorState {
     enablePuryfi: boolean;
     unlockPuryfi: boolean;
     disablePuryfi: boolean;
+    freezeChaster: boolean;
+    unfreezeChaster: boolean;
+    toggleFreeze: boolean;
+    pillory: boolean;
+    pilloryDuration: number;
+    pilloryReason: string;
+    timerVisibility: boolean;
+    displayRemainingTime: boolean;
     addTime: boolean;
     addTimeSeconds: number;
     removeTime: boolean;
@@ -63,6 +71,14 @@ const DEFAULT_STATE: EditorState = {
     enablePuryfi: true,
     unlockPuryfi: false,
     disablePuryfi: false,
+    freezeChaster: false,
+    unfreezeChaster: false,
+    toggleFreeze: false,
+    pillory: false,
+    pilloryDuration: 300,
+    pilloryReason: "",
+    timerVisibility: false,
+    displayRemainingTime: true,
     addTime: false,
     addTimeSeconds: 120,
     removeTime: false,
@@ -87,6 +103,10 @@ function stateFromInitial(
     const scoreValue = conditionValue(trigger, "score");
     const addTime = initial.actions.find((action) => action.type === "chaster.add_time");
     const removeTime = initial.actions.find((action) => action.type === "chaster.remove_time");
+    const pillory = initial.actions.find((action) => action.type === "chaster.pillory");
+    const timerVisibility = initial.actions.find(
+        (action) => action.type === "chaster.set_timer_visibility",
+    );
     const log = initial.actions.find((action) => action.type === "chaster.log");
 
     return {
@@ -111,6 +131,17 @@ function stateFromInitial(
         enablePuryfi: actionTypes.has("puryfi.enable"),
         unlockPuryfi: actionTypes.has("puryfi.unlock"),
         disablePuryfi: actionTypes.has("puryfi.disable"),
+        freezeChaster: actionTypes.has("chaster.freeze"),
+        unfreezeChaster: actionTypes.has("chaster.unfreeze"),
+        toggleFreeze: actionTypes.has("chaster.toggle_freeze"),
+        pillory: Boolean(pillory),
+        pilloryDuration: Number(pillory?.params?.duration ?? 300),
+        pilloryReason: String(pillory?.params?.reason ?? ""),
+        timerVisibility: Boolean(timerVisibility),
+        displayRemainingTime:
+            timerVisibility?.params?.display_remaining_time === undefined
+                ? true
+                : Boolean(timerVisibility.params.display_remaining_time),
         addTime: Boolean(addTime),
         addTimeSeconds: Number(addTime?.params?.seconds ?? 120),
         removeTime: Boolean(removeTime),
@@ -161,58 +192,35 @@ export default function AutomationEditor({
             return;
         }
 
-        const defaults =
-            nextEvent === "chaster.lock.unfrozen"
-                ? {
-                      lockPuryfi: false,
-                      enablePuryfi: false,
-                      unlockPuryfi: true,
-                      disablePuryfi: true,
-                      addTime: false,
-                      removeTime: false,
-                      writeLog: false,
-                  }
-                : nextEvent === "puryfi.media.scan"
-                    ? {
-                          lockPuryfi: false,
-                          enablePuryfi: false,
-                          unlockPuryfi: false,
-                          disablePuryfi: false,
-                          addTime: true,
-                          removeTime: false,
-                          writeLog: false,
-                      }
-                    : nextEvent === "puryfi.connection.ready"
-                        ? {
-                              lockPuryfi: true,
-                              enablePuryfi: true,
-                              unlockPuryfi: false,
-                              disablePuryfi: false,
-                              addTime: false,
-                              removeTime: false,
-                              writeLog: false,
-                          }
-                        : nextEvent === "puryfi.connection.disconnected" ||
-                            nextEvent === "puryfi.state.changed" ||
-                            nextEvent === "puryfi.user.changed"
-                          ? {
-                                lockPuryfi: false,
-                                enablePuryfi: false,
-                                unlockPuryfi: false,
-                                disablePuryfi: false,
-                                addTime: false,
-                                removeTime: false,
-                                writeLog: true,
-                            }
-                          : {
-                                lockPuryfi: true,
-                                enablePuryfi: true,
-                                unlockPuryfi: false,
-                                disablePuryfi: false,
-                                addTime: false,
-                                removeTime: false,
-                                writeLog: false,
-                            };
+        const defaults = {
+            lockPuryfi: false,
+            enablePuryfi: false,
+            unlockPuryfi: false,
+            disablePuryfi: false,
+            freezeChaster: false,
+            unfreezeChaster: false,
+            toggleFreeze: false,
+            pillory: false,
+            timerVisibility: false,
+            addTime: false,
+            removeTime: false,
+            writeLog: false,
+        };
+        if (nextEvent === "chaster.lock.unfrozen") {
+            Object.assign(defaults, { unlockPuryfi: true, disablePuryfi: true });
+        } else if (nextEvent === "puryfi.media.scan") {
+            Object.assign(defaults, { addTime: true });
+        } else if (nextEvent === "puryfi.connection.ready") {
+            Object.assign(defaults, { lockPuryfi: true, enablePuryfi: true });
+        } else if (
+            nextEvent === "puryfi.connection.disconnected" ||
+            nextEvent === "puryfi.state.changed" ||
+            nextEvent === "puryfi.user.changed"
+        ) {
+            Object.assign(defaults, { writeLog: true });
+        } else {
+            Object.assign(defaults, { lockPuryfi: true, enablePuryfi: true });
+        }
 
         setState((current) => ({
             ...current,
@@ -241,6 +249,33 @@ export default function AutomationEditor({
         }
         if (state.disablePuryfi) {
             actions.push({ type: "puryfi.disable", params: {}, on_failure: "stop" });
+        }
+        if (state.freezeChaster) {
+            actions.push({ type: "chaster.freeze", params: {}, on_failure: "stop" });
+        }
+        if (state.unfreezeChaster) {
+            actions.push({ type: "chaster.unfreeze", params: {}, on_failure: "stop" });
+        }
+        if (state.toggleFreeze) {
+            actions.push({ type: "chaster.toggle_freeze", params: {}, on_failure: "stop" });
+        }
+        if (state.pillory) {
+            const reason = state.pilloryReason.trim();
+            actions.push({
+                type: "chaster.pillory",
+                params: {
+                    duration: Math.max(1, state.pilloryDuration),
+                    ...(reason ? { reason } : {}),
+                },
+                on_failure: "stop",
+            });
+        }
+        if (state.timerVisibility) {
+            actions.push({
+                type: "chaster.set_timer_visibility",
+                params: { display_remaining_time: state.displayRemainingTime },
+                on_failure: "stop",
+            });
         }
         if (state.addTime) {
             actions.push({
@@ -499,6 +534,31 @@ export default function AutomationEditor({
                                 onChange={(checked) => update("disablePuryfi", checked)}
                             />
                             <ActionToggle
+                                label="Freeze the Chaster lock"
+                                checked={state.freezeChaster}
+                                onChange={(checked) => update("freezeChaster", checked)}
+                            />
+                            <ActionToggle
+                                label="Unfreeze the Chaster lock"
+                                checked={state.unfreezeChaster}
+                                onChange={(checked) => update("unfreezeChaster", checked)}
+                            />
+                            <ActionToggle
+                                label="Toggle the Chaster freeze state"
+                                checked={state.toggleFreeze}
+                                onChange={(checked) => update("toggleFreeze", checked)}
+                            />
+                            <ActionToggle
+                                label="Put the wearer in pillory"
+                                checked={state.pillory}
+                                onChange={(checked) => update("pillory", checked)}
+                            />
+                            <ActionToggle
+                                label="Show or hide the remaining time"
+                                checked={state.timerVisibility}
+                                onChange={(checked) => update("timerVisibility", checked)}
+                            />
+                            <ActionToggle
                                 label="Add time to the Chaster lock"
                                 checked={state.addTime}
                                 onChange={(checked) => update("addTime", checked)}
@@ -514,6 +574,50 @@ export default function AutomationEditor({
                                 onChange={(checked) => update("writeLog", checked)}
                             />
                         </div>
+
+                        {state.pillory ? (
+                            <div className="space-y-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs text-slate-400">Pillory duration</span>
+                                    <NumberInput
+                                        id="automation-pillory-duration"
+                                        value={state.pilloryDuration}
+                                        onChange={(value) => update("pilloryDuration", value)}
+                                        min={1}
+                                        max={604_800}
+                                        suffix="seconds"
+                                        className="max-w-48"
+                                    />
+                                </div>
+                                <Input
+                                    value={state.pilloryReason}
+                                    onChange={(event) =>
+                                        update("pilloryReason", event.target.value)
+                                    }
+                                    placeholder="Reason (optional)"
+                                    className="border-white/10 bg-[#0F0E16] text-white"
+                                />
+                            </div>
+                        ) : null}
+
+                        {state.timerVisibility ? (
+                            <div className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
+                                <span className="text-xs text-slate-400">Remaining time</span>
+                                <select
+                                    value={state.displayRemainingTime ? "show" : "hide"}
+                                    onChange={(event) =>
+                                        update(
+                                            "displayRemainingTime",
+                                            event.target.value === "show",
+                                        )
+                                    }
+                                    className="h-9 rounded-lg border border-white/10 bg-[#0F0E16] px-3 text-xs text-white outline-none focus:border-cyan-400/50"
+                                >
+                                    <option value="show">Show to the wearer</option>
+                                    <option value="hide">Hide from the wearer</option>
+                                </select>
+                            </div>
+                        ) : null}
 
                         {state.addTime ? (
                             <div className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">

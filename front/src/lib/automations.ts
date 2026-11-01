@@ -88,6 +88,11 @@ const ACTION_LABELS: Record<string, string> = {
     "puryfi.enter_emergency_token": "enter the emergency PuryFi token",
     "chaster.add_time": "add time to the Chaster lock",
     "chaster.remove_time": "remove time from the Chaster lock",
+    "chaster.freeze": "freeze the Chaster lock",
+    "chaster.unfreeze": "unfreeze the Chaster lock",
+    "chaster.toggle_freeze": "toggle the Chaster freeze state",
+    "chaster.pillory": "put the wearer in pillory",
+    "chaster.set_timer_visibility": "change the remaining-time visibility",
     "chaster.log": "write a Chaster log",
 };
 
@@ -161,6 +166,18 @@ export function actionSummary(action: AutomationActionSchema): string {
         const seconds = Number(action.params?.seconds ?? 0);
         const verb = action.type === "chaster.add_time" ? "add" : "remove";
         return `${verb} ${formatDuration(seconds)} ${verb === "add" ? "to" : "from"} the Chaster lock`;
+    }
+    if (action.type === "chaster.pillory") {
+        const seconds = Number(action.params?.duration ?? 0);
+        const reason = action.params?.reason
+            ? ` (${String(action.params.reason)})`
+            : "";
+        return `put the wearer in pillory for ${formatDuration(seconds)}${reason}`;
+    }
+    if (action.type === "chaster.set_timer_visibility") {
+        return action.params?.display_remaining_time
+            ? "show the remaining lock time"
+            : "hide the remaining lock time";
     }
     if (action.type === "chaster.log") {
         return `write a log${action.params?.title ? `: “${action.params.title}”` : ""}`;

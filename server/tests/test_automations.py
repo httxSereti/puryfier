@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
 from bson import ObjectId
 from conftest import WEBHOOK_AUTH
+from pydantic import ValidationError
 from test_extensions import make_chaster_response, make_configuration_response
 from test_webhooks_chaster import wait_for_inbox
 
@@ -129,6 +131,39 @@ class TestAutomationApi:
         )
         assert response.status_code == 201, response.text
         assert response.json()["actions"][0]["type"] == "chaster.remove_time"
+
+    def test_chaster_lock_actions_are_accepted(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_automation_session(seed_lock_configuration)
+        mock_chaster_api(
+            make_configuration_response(
+                role="keyholder", session_id=SESSION_ID
+            )
+        )
+        actions = [
+            {"type": "chaster.freeze", "params": {}, "on_failure": "stop"},
+            {"type": "chaster.unfreeze", "params": {}, "on_failure": "stop"},
+            {"type": "chaster.toggle_freeze", "params": {}, "on_failure": "stop"},
+            {
+                "type": "chaster.pillory",
+                "params": {"duration": 300, "reason": "Censored media"},
+                "on_failure": "stop",
+            },
+            {
+                "type": "chaster.set_timer_visibility",
+                "params": {"display_remaining_time": False},
+                "on_failure": "stop",
+            },
+        ]
+        response = client.post(
+            "/api/configuration/config-token/automations",
+            json=automation_payload(name="Lock actions", actions=actions),
+        )
+        assert response.status_code == 201, response.text
+        assert [action["type"] for action in response.json()["actions"]] == [
+            action["type"] for action in actions
+        ]
 
     def test_wearer_is_denied_without_permission(
         self, client, seed_lock_configuration, mock_chaster_api
@@ -722,6 +757,16 @@ class TestAutomationEngine:
         assert "puryfi.user.changed" in events
         assert "puryfi.intents.changed" not in events
 
+    def test_catalog_exposes_chaster_lock_actions(self):
+        actions = {action.type for action in automation_catalog().actions}
+        assert {
+            "chaster.freeze",
+            "chaster.unfreeze",
+            "chaster.toggle_freeze",
+            "chaster.pillory",
+            "chaster.set_timer_visibility",
+        } <= actions
+
     def test_event_rule_uses_puryfi_state_context(self):
         async def run():
             rule = self._event_rule(
@@ -922,14 +967,54 @@ class FakeActionRegistry:
         return None
 
 
+class FakeActionChaster:
+    def __init__(self, *, success: bool = True) -> None:
+        self.success = success
+        self.calls: list[tuple[str, tuple, dict]] = []
+
+    async def freeze(self, session_id: str) -> bool:
+        self.calls.append(("freeze", (session_id,), {}))
+        return self.success
+
+    async def unfreeze(self, session_id: str) -> bool:
+        self.calls.append(("unfreeze", (session_id,), {}))
+        return self.success
+
+    async def toggle_freeze(self, session_id: str) -> bool:
+        self.calls.append(("toggle_freeze", (session_id,), {}))
+        return self.success
+
+    async def pillory(
+        self,
+        session_id: str,
+        duration: int,
+        *,
+        reason: str | None = None,
+    ) -> bool:
+        self.calls.append(
+            ("pillory", (session_id, duration), {"reason": reason})
+        )
+        return self.success
+
+    async def set_display_remaining_time(
+        self, session_id: str, display: bool
+    ) -> bool:
+        self.calls.append(
+            ("set_display_remaining_time", (session_id, display), {})
+        )
+        return self.success
+
+
 def make_action_executor(
     session: LockSession,
+    *,
+    chaster: FakeActionChaster | None = None,
 ) -> tuple[ActionExecutor, FakeActionSessions, FakeActionQueue]:
     sessions = FakeActionSessions()
     queue = FakeActionQueue()
     executor = ActionExecutor(
         sessions=sessions,  # type: ignore[arg-type]
-        chaster=SimpleNamespace(),  # type: ignore[arg-type]
+        chaster=chaster or FakeActionChaster(),  # type: ignore[arg-type]
         puryfi=FakeActionRegistry(),  # type: ignore[arg-type]
         queue=queue,  # type: ignore[arg-type]
     )
@@ -1004,3 +1089,199 @@ class TestPuryfiLockAction:
             }
 
         asyncio.run(run())
+
+
+class TestChasterLockActions:
+    def test_freeze_unfreeze_and_toggle_call_the_gateway(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+            )
+            chaster = FakeActionChaster()
+            executor, _, _ = make_action_executor(session, chaster=chaster)
+
+            results = await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="chaster.freeze", params={}, on_failure="stop"
+                    ),
+                    AutomationActionSchema(
+                        type="chaster.unfreeze", params={}, on_failure="stop"
+                    ),
+                    AutomationActionSchema(
+                        type="chaster.toggle_freeze",
+                        params={},
+                        on_failure="stop",
+                    ),
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="puryfi.connection.disconnected",
+                ),
+            )
+
+            assert [result.status for result in results] == [
+                "success",
+                "success",
+                "success",
+            ]
+            assert chaster.calls == [
+                ("freeze", (SESSION_ID,), {}),
+                ("unfreeze", (SESSION_ID,), {}),
+                ("toggle_freeze", (SESSION_ID,), {}),
+            ]
+
+        asyncio.run(run())
+
+    def test_pillory_passes_duration_and_reason(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+            )
+            chaster = FakeActionChaster()
+            executor, _, _ = make_action_executor(session, chaster=chaster)
+
+            await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="chaster.pillory",
+                        params={
+                            "duration": 300,
+                            "reason": "Censored media",
+                        },
+                        on_failure="stop",
+                    )
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="puryfi.media.scan",
+                ),
+            )
+
+            assert chaster.calls == [
+                (
+                    "pillory",
+                    (SESSION_ID, 300),
+                    {"reason": "Censored media"},
+                )
+            ]
+
+        asyncio.run(run())
+
+    def test_pillory_ignores_a_blank_reason(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+            )
+            chaster = FakeActionChaster()
+            executor, _, _ = make_action_executor(session, chaster=chaster)
+
+            await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="chaster.pillory",
+                        params={"duration": 300, "reason": "   "},
+                        on_failure="stop",
+                    )
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="puryfi.media.scan",
+                ),
+            )
+
+            assert chaster.calls[0][2] == {"reason": None}
+
+        asyncio.run(run())
+
+    def test_timer_visibility_passes_the_boolean(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+            )
+            chaster = FakeActionChaster()
+            executor, _, _ = make_action_executor(session, chaster=chaster)
+
+            await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="chaster.set_timer_visibility",
+                        params={"display_remaining_time": True},
+                        on_failure="stop",
+                    ),
+                    AutomationActionSchema(
+                        type="chaster.set_timer_visibility",
+                        params={"display_remaining_time": False},
+                        on_failure="stop",
+                    ),
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="chaster.lock.frozen",
+                ),
+            )
+
+            assert chaster.calls == [
+                ("set_display_remaining_time", (SESSION_ID, True), {}),
+                ("set_display_remaining_time", (SESSION_ID, False), {}),
+            ]
+
+        asyncio.run(run())
+
+    def test_a_rejected_lock_action_is_reported_as_failed(self):
+        async def run():
+            session = LockSession(
+                session_id=SESSION_ID,
+                config=ChasterExtensionConfigSchema(),
+            )
+            chaster = FakeActionChaster(success=False)
+            executor, _, _ = make_action_executor(session, chaster=chaster)
+
+            results = await executor.execute(
+                [
+                    AutomationActionSchema(
+                        type="chaster.freeze", params={}, on_failure="stop"
+                    )
+                ],
+                ActionContext(
+                    session=session,
+                    event_id="event-1",
+                    event_type="puryfi.connection.disconnected",
+                ),
+            )
+
+            assert results[0].status == "failed"
+            assert results[0].error == "Chaster rejected the action"
+
+        asyncio.run(run())
+
+
+class TestChasterLockActionValidation:
+    def test_pillory_requires_a_positive_duration(self):
+        with pytest.raises(ValidationError):
+            AutomationActionSchema(
+                type="chaster.pillory",
+                params={"duration": 0},
+            )
+
+    def test_pillory_reason_must_be_a_string(self):
+        with pytest.raises(ValidationError):
+            AutomationActionSchema(
+                type="chaster.pillory",
+                params={"duration": 300, "reason": 1},
+            )
+
+    def test_timer_visibility_requires_a_boolean(self):
+        with pytest.raises(ValidationError):
+            AutomationActionSchema(
+                type="chaster.set_timer_visibility",
+                params={"display_remaining_time": "show"},
+            )

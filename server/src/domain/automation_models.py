@@ -130,6 +130,11 @@ ACTION_TYPES = (
     "puryfi.enter_emergency_token",
     "chaster.add_time",
     "chaster.remove_time",
+    "chaster.freeze",
+    "chaster.unfreeze",
+    "chaster.toggle_freeze",
+    "chaster.pillory",
+    "chaster.set_timer_visibility",
     "chaster.log",
 )
 
@@ -194,6 +199,28 @@ class AutomationActionSchema(BaseModel):
                 raise ValueError(
                     f"{self.type} requires an integer seconds value "
                     "between 1 and 604800"
+                )
+        elif self.type == "chaster.pillory":
+            duration = self.params.get("duration")
+            if (
+                isinstance(duration, bool)
+                or not isinstance(duration, int)
+                or duration <= 0
+                or duration > 604_800
+            ):
+                raise ValueError(
+                    "chaster.pillory requires an integer duration value "
+                    "between 1 and 604800"
+                )
+            reason = self.params.get("reason")
+            if reason is not None and not isinstance(reason, str):
+                raise ValueError("chaster.pillory reason must be a string")
+        elif self.type == "chaster.set_timer_visibility":
+            display = self.params.get("display_remaining_time")
+            if not isinstance(display, bool):
+                raise ValueError(
+                    "chaster.set_timer_visibility requires a boolean "
+                    "display_remaining_time value"
                 )
         elif self.type == "chaster.log":
             title = self.params.get("title")
@@ -513,6 +540,70 @@ def automation_catalog() -> AutomationCatalogSchema:
                         required=True,
                         min=1,
                         max=604_800,
+                    )
+                ],
+            ),
+            AutomationActionCatalogSchema(
+                type="chaster.freeze",
+                label="Freeze the Chaster lock",
+                description=(
+                    "Freezes the lock, preventing the wearer from making "
+                    "changes or ending the session."
+                ),
+            ),
+            AutomationActionCatalogSchema(
+                type="chaster.unfreeze",
+                label="Unfreeze the Chaster lock",
+                description=(
+                    "Unfreezes the lock, allowing the wearer to make changes."
+                ),
+            ),
+            AutomationActionCatalogSchema(
+                type="chaster.toggle_freeze",
+                label="Toggle the Chaster freeze state",
+                description=(
+                    "Freezes the lock when it is unfrozen and unfreezes it "
+                    "when it is frozen."
+                ),
+            ),
+            AutomationActionCatalogSchema(
+                type="chaster.pillory",
+                label="Put the wearer in pillory",
+                description=(
+                    "Displays the wearer in the public pillory for the "
+                    "specified duration."
+                ),
+                params=[
+                    AutomationActionParamCatalogSchema(
+                        key="duration",
+                        label="Duration (seconds)",
+                        type="number",
+                        required=True,
+                        min=1,
+                        max=604_800,
+                    ),
+                    AutomationActionParamCatalogSchema(
+                        key="reason",
+                        label="Reason",
+                        type="text",
+                        help="Optional reason displayed on the pillory.",
+                    ),
+                ],
+            ),
+            AutomationActionCatalogSchema(
+                type="chaster.set_timer_visibility",
+                label="Show or hide the remaining time",
+                description=(
+                    "Sets whether the lock's remaining time is visible to "
+                    "the wearer."
+                ),
+                params=[
+                    AutomationActionParamCatalogSchema(
+                        key="display_remaining_time",
+                        label="Display remaining time",
+                        type="boolean",
+                        required=True,
+                        default=True,
                     )
                 ],
             ),

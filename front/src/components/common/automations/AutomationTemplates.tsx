@@ -1,12 +1,16 @@
 import {
     BellRing,
     Eye,
+    Gavel,
     Gift,
     Image,
     LogIn,
     LogOut,
     RefreshCw,
+    Shuffle,
     Snowflake,
+    Timer,
+    TimerOff,
     TriangleAlert,
     Unlock,
 } from "lucide-react";
@@ -125,6 +129,165 @@ const AUTOMATION_TEMPLATES: Template[] = [
                 { type: "puryfi.disable", params: {}, on_failure: "stop" },
             ],
             limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "freeze-on-disconnect",
+        label: "Freeze the lock when PuryFi disconnects",
+        description:
+            "If PuryFi disconnects, freeze the Chaster lock and write a log.",
+        icon: Snowflake,
+        payload: {
+            name: "Freeze the lock when PuryFi disconnects",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.connection.disconnected",
+                conditions: [{ field: "chaster_frozen", op: "eq", value: false }],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "chaster.freeze", params: {}, on_failure: "stop" },
+                {
+                    type: "chaster.log",
+                    params: {
+                        title: "PuryFi disconnected",
+                        description:
+                            "PuryFi disconnected, so the Chaster lock was frozen.",
+                    },
+                    on_failure: "continue",
+                },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "toggle-freeze-on-disconnect",
+        label: "Toggle the freeze state when PuryFi disconnects",
+        description:
+            "If PuryFi disconnects, toggle the Chaster freeze state and write a log.",
+        icon: Shuffle,
+        payload: {
+            name: "Toggle the freeze state when PuryFi disconnects",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.connection.disconnected",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                { type: "chaster.toggle_freeze", params: {}, on_failure: "stop" },
+                {
+                    type: "chaster.log",
+                    params: {
+                        title: "PuryFi disconnected",
+                        description:
+                            "PuryFi disconnected, so the Chaster freeze state was toggled.",
+                    },
+                    on_failure: "continue",
+                },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "hide-time-on-freeze",
+        label: "Hide the remaining time when frozen",
+        description:
+            "When the Chaster lock is frozen, hide its remaining time from the wearer.",
+        icon: TimerOff,
+        payload: {
+            name: "Hide the remaining time when frozen",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "chaster.lock.frozen",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.set_timer_visibility",
+                    params: { display_remaining_time: false },
+                    on_failure: "continue",
+                },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "show-time-on-unfreeze",
+        label: "Show the remaining time when unfrozen",
+        description:
+            "When the Chaster lock is unfrozen, show its remaining time to the wearer.",
+        icon: Timer,
+        payload: {
+            name: "Show the remaining time when unfrozen",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "chaster.lock.unfrozen",
+                conditions: [],
+                min_score: 0,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.set_timer_visibility",
+                    params: { display_remaining_time: true },
+                    on_failure: "continue",
+                },
+            ],
+            limits: { cooldown_seconds: 0, max_per_day: 0 },
+        },
+    },
+    {
+        id: "pillory-censored-media",
+        label: "Pillory for censored media",
+        description:
+            "When an image contains a censorable label, put the wearer in pillory for 5 minutes.",
+        icon: Gavel,
+        payload: {
+            name: "Pillory for censored media",
+            enabled: true,
+            priority: 100,
+            trigger: {
+                event: "puryfi.media.scan",
+                conditions: [
+                    {
+                        field: "labels",
+                        op: "contains_any",
+                        value: CENSORABLE_LABELS,
+                    },
+                ],
+                min_score: 0.5,
+                count: 1,
+                window_seconds: 0,
+                count_mode: "images",
+            },
+            actions: [
+                {
+                    type: "chaster.pillory",
+                    params: {
+                        duration: 300,
+                        reason: "Censored media detected",
+                    },
+                    on_failure: "stop",
+                },
+            ],
+            limits: { cooldown_seconds: 5, max_per_day: 0 },
         },
     },
     {

@@ -209,28 +209,71 @@ async def create_custom_log(
 
 async def add_time_to_lock(session_id: str, duration: int) -> bool:
     """Add ``duration`` seconds to a Chaster lock."""
-    return await _change_time(session_id, duration, "add_time")
+    return await _run_lock_action(session_id, "add_time", duration)
 
 
 async def remove_time_from_lock(session_id: str, duration: int) -> bool:
     """Remove ``duration`` seconds from a Chaster lock."""
-    return await _change_time(session_id, duration, "remove_time")
+    return await _run_lock_action(session_id, "remove_time", duration)
 
 
-async def _change_time(session_id: str, duration: int, action: str) -> bool:
+async def freeze_lock(session_id: str) -> bool:
+    """Freeze a Chaster lock."""
+    return await _run_lock_action(session_id, "freeze")
+
+
+async def unfreeze_lock(session_id: str) -> bool:
+    """Unfreeze a Chaster lock."""
+    return await _run_lock_action(session_id, "unfreeze")
+
+
+async def toggle_freeze_lock(session_id: str) -> bool:
+    """Toggle the frozen state of a Chaster lock."""
+    return await _run_lock_action(session_id, "toggle_freeze")
+
+
+async def pillory_lock(
+    session_id: str,
+    duration: int,
+    *,
+    reason: str | None = None,
+) -> bool:
+    """Put a Chaster lock wearer in pillory for ``duration`` seconds."""
+    params: dict[str, Any] = {"duration": duration}
+    if reason:
+        params["reason"] = reason
+    return await _run_lock_action(session_id, "pillory", params)
+
+
+async def set_display_remaining_time(
+    session_id: str, display: bool
+) -> bool:
+    """Show or hide the remaining time of a Chaster lock."""
+    return await _run_lock_action(
+        session_id, "set_display_remaining_time", display
+    )
+
+
+async def _run_lock_action(
+    session_id: str, action: str, params: Any = None
+) -> bool:
+    payload: dict[str, Any] = {"name": action}
+    if params is not None:
+        payload["params"] = params
+
     try:
         response = await request_chaster(
             "POST",
             f"/api/extensions/sessions/{session_id}/action",
-            json={"action": {"name": action, "params": duration}},
+            json={"action": payload},
         )
         return response.status_code == 201
     except httpx.HTTPError:
         log.warning(
-            "chaster.time_action_failed",
+            "chaster.lock_action_failed",
             chaster_session_id=session_id,
             chaster_action=action,
-            duration=duration,
+            chaster_params=params,
             exc_info=True,
         )
         return False
@@ -323,6 +366,29 @@ class ChasterService:
 
     async def remove_time(self, session_id: str, duration: int) -> bool:
         return await remove_time_from_lock(session_id, duration)
+
+    async def freeze(self, session_id: str) -> bool:
+        return await freeze_lock(session_id)
+
+    async def unfreeze(self, session_id: str) -> bool:
+        return await unfreeze_lock(session_id)
+
+    async def toggle_freeze(self, session_id: str) -> bool:
+        return await toggle_freeze_lock(session_id)
+
+    async def pillory(
+        self,
+        session_id: str,
+        duration: int,
+        *,
+        reason: str | None = None,
+    ) -> bool:
+        return await pillory_lock(session_id, duration, reason=reason)
+
+    async def set_display_remaining_time(
+        self, session_id: str, display: bool
+    ) -> bool:
+        return await set_display_remaining_time(session_id, display)
 
     async def create_log(
         self,

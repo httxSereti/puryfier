@@ -150,6 +150,9 @@ class ActionExecutor:
                     error=None if success else "Chaster rejected the log",
                 )
 
+            if action.type.startswith("chaster."):
+                return await self._execute_chaster(action, context)
+
             if action.type.startswith("puryfi."):
                 return await self._execute_puryfi(action, context)
 
@@ -170,6 +173,62 @@ class ActionExecutor:
                 status="failed",
                 error=f"{type(exc).__name__}: {exc}",
             )
+
+    async def _execute_chaster(
+        self, action: AutomationActionSchema, context: ActionContext
+    ) -> ActionResult:
+        session_id = context.session.session_id
+
+        if action.type == "chaster.freeze":
+            success = await self._chaster.freeze(session_id)
+        elif action.type == "chaster.unfreeze":
+            success = await self._chaster.unfreeze(session_id)
+        elif action.type == "chaster.toggle_freeze":
+            success = await self._chaster.toggle_freeze(session_id)
+        elif action.type == "chaster.pillory":
+            duration = self._int_param(action, "duration")
+            if duration is None or duration <= 0:
+                return ActionResult(
+                    type=action.type,
+                    status="failed",
+                    error="duration must be a positive integer",
+                )
+            reason = action.params.get("reason")
+            if reason is not None and not isinstance(reason, str):
+                return ActionResult(
+                    type=action.type,
+                    status="failed",
+                    error="reason must be a string",
+                )
+            normalized_reason = reason.strip() if reason else ""
+            success = await self._chaster.pillory(
+                session_id,
+                duration,
+                reason=normalized_reason or None,
+            )
+        elif action.type == "chaster.set_timer_visibility":
+            display = action.params.get("display_remaining_time")
+            if not isinstance(display, bool):
+                return ActionResult(
+                    type=action.type,
+                    status="failed",
+                    error="display_remaining_time must be a boolean",
+                )
+            success = await self._chaster.set_display_remaining_time(
+                session_id, display
+            )
+        else:
+            return ActionResult(
+                type=action.type,
+                status="failed",
+                error=f"Unsupported Chaster action: {action.type}",
+            )
+
+        return ActionResult(
+            type=action.type,
+            status="success" if success else "failed",
+            error=None if success else "Chaster rejected the action",
+        )
 
     async def _execute_puryfi(
         self, action: AutomationActionSchema, context: ActionContext

@@ -137,6 +137,24 @@ class ChasterGateway(Protocol):
 
     async def remove_time(self, session_id: str, duration: int) -> bool: ...
 
+    async def freeze(self, session_id: str) -> bool: ...
+
+    async def unfreeze(self, session_id: str) -> bool: ...
+
+    async def toggle_freeze(self, session_id: str) -> bool: ...
+
+    async def pillory(
+        self,
+        session_id: str,
+        duration: int,
+        *,
+        reason: str | None = None,
+    ) -> bool: ...
+
+    async def set_display_remaining_time(
+        self, session_id: str, display: bool
+    ) -> bool: ...
+
     async def create_log(
         self,
         session_id: str,

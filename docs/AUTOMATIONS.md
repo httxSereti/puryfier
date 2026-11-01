@@ -160,7 +160,18 @@ The configuration editor uses PuryFi's body-part artwork from
 | `puryfi.enter_emergency_token` | `token` |
 | `chaster.add_time` | `seconds` |
 | `chaster.remove_time` | `seconds` |
+| `chaster.freeze` | — |
+| `chaster.unfreeze` | — |
+| `chaster.toggle_freeze` | — |
+| `chaster.pillory` | `duration` (seconds), optional `reason` |
+| `chaster.set_timer_visibility` | `display_remaining_time` (boolean) |
 | `chaster.log` | `title`, `description` |
+
+`chaster.freeze`, `chaster.unfreeze`, `chaster.toggle_freeze`, `chaster.pillory`
+and `chaster.set_timer_visibility` call Chaster's extension lock actions. They
+are useful for punishing a PuryFi disconnect, rolling a freeze with
+`toggle_freeze`, pillorying censored media, or hiding the remaining time while
+the lock is frozen.
 
 ---
 

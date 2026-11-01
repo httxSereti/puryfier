@@ -162,6 +162,67 @@ describe("AutomationsSection", () => {
         });
     });
 
+    it("saves the new Chaster lock actions", async () => {
+        const user = userEvent.setup();
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Lock on freeze");
+        await user.click(screen.getByRole("button", { name: "New automation" }));
+        await user.type(
+            screen.getByPlaceholderText("e.g. Eyes and Belly"),
+            "Lock controls",
+        );
+
+        await user.click(
+            screen.getByRole("checkbox", { name: "Freeze the Chaster lock" }),
+        );
+        await user.click(
+            screen.getByRole("checkbox", { name: "Put the wearer in pillory" }),
+        );
+        await user.type(
+            screen.getByPlaceholderText("Reason (optional)"),
+            "Censored media",
+        );
+        await user.click(
+            screen.getByRole("checkbox", {
+                name: "Show or hide the remaining time",
+            }),
+        );
+
+        const selects = screen.getAllByRole("combobox");
+        await user.selectOptions(selects[selects.length - 1], "hide");
+
+        await user.click(
+            screen.getByRole("button", { name: "Save automation" }),
+        );
+
+        await waitFor(() => {
+            expect(createAutomationMock).toHaveBeenCalledWith(
+                "config-token",
+                expect.objectContaining({
+                    name: "Lock controls",
+                    actions: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: "chaster.freeze",
+                            params: {},
+                        }),
+                        expect.objectContaining({
+                            type: "chaster.pillory",
+                            params: {
+                                duration: 300,
+                                reason: "Censored media",
+                            },
+                        }),
+                        expect.objectContaining({
+                            type: "chaster.set_timer_visibility",
+                            params: { display_remaining_time: false },
+                        }),
+                    ]),
+                }),
+            );
+        });
+    });
+
     it("defaults media cooldowns to five seconds", async () => {
         const user = userEvent.setup();
         render(<AutomationsSection configurationToken="config-token" />);
