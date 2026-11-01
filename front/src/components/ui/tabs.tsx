@@ -7,6 +7,8 @@ export interface TabItem {
     value: string;
     label: string;
     icon?: ReactNode;
+    /** Pin the tab to the trailing edge of the tab list. */
+    align?: "end";
 }
 
 interface TabsProps {
@@ -64,7 +66,7 @@ export default function Tabs({
             aria-label={ariaLabel}
             onKeyDown={handleKeyDown}
             className={cn(
-                "flex w-full gap-1 rounded-xl border border-white/[0.07] bg-[#17151F]/90 p-1 shadow-lg shadow-black/10 sm:w-auto",
+                "flex w-full gap-1 rounded-xl border border-white/[0.07] bg-[#17151F]/90 p-1 shadow-lg shadow-black/10",
                 className,
             )}
         >
@@ -85,6 +87,7 @@ export default function Tabs({
                             selected
                                 ? "bg-white/[0.08] text-white shadow-sm"
                                 : "text-slate-400 hover:bg-white/[0.03] hover:text-slate-200",
+                            item.align === "end" && "sm:ml-auto",
                         )}
                     >
                         {item.icon ? (

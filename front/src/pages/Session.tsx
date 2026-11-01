@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { House, LockKeyhole, Settings2, Sparkles } from "lucide-react";
+import { Cog, House, LockKeyhole, Sparkles } from "lucide-react";
 
 import AutomationsSection from "@/components/common/automations/AutomationsSection";
 import MotdCard from "@/components/common/cards/MotdCard";
@@ -13,6 +13,7 @@ import ShowPuryfiPassword from "@/components/common/sessions/keyholder/ShowPuryf
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
 import Tabs from "@/components/ui/tabs";
+import type { TabItem } from "@/components/ui/tabs";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
 import { useSession } from "@/hooks/useSession";
 import { readChasterIframeParams } from "@/lib/chaster";
@@ -24,10 +25,10 @@ import type {
 
 type SessionTab = "home" | "automations" | "settings";
 
-const TABS = [
+const TABS: TabItem[] = [
     { value: "home", label: "Home", icon: <House /> },
     { value: "automations", label: "Automations", icon: <Sparkles /> },
-    { value: "settings", label: "Settings", icon: <Settings2 /> },
+    { value: "settings", label: "Settings", icon: <Cog />, align: "end" },
 ];
 
 export default function Session() {
