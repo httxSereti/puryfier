@@ -236,6 +236,7 @@ Example: `count = 3`, `window_seconds = 300` means “3 matching images within 5
 | POST | `/api/configuration/{token}/automations/{id}/test` |
 | POST | `/api/configuration/{token}/automations/migrate` |
 | GET | `/api/session/{main_token}/automations` |
+| PUT | `/api/session/{main_token}/configuration` |
 
 ---
 

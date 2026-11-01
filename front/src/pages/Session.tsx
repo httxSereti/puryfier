@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { LockKeyhole } from "lucide-react";
+import { useMemo, useState } from "react";
+import { LockKeyhole, Settings2 } from "lucide-react";
 
 import MotdCard from "@/components/common/cards/MotdCard";
 import PageHeader from "@/components/common/layout/PageHeader";
@@ -11,15 +11,33 @@ import SessionSkeleton from "@/components/common/sessions/SessionSkeleton";
 import ShowPuryfiPassword from "@/components/common/sessions/keyholder/ShowPuryfiPassword";
 import ErrorAlert from "@/components/ui/error-alert";
 import StatusPill from "@/components/ui/status-pill";
+import Tabs from "@/components/ui/tabs";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
 import { useSession } from "@/hooks/useSession";
 import { readChasterIframeParams } from "@/lib/chaster";
 import { cn } from "@/lib/utils";
-import type { ChasterExtensionSessionSchema } from "@/types/api";
+import type {
+    ChasterExtensionConfigSchema,
+    ChasterExtensionSessionSchema,
+} from "@/types/api";
+
+type SessionTab = "session" | "settings";
+
+const TABS = [
+    { value: "session", label: "Session", icon: <LockKeyhole /> },
+    { value: "settings", label: "Settings", icon: <Settings2 /> },
+];
 
 export default function Session() {
     const { mainToken } = useMemo(() => readChasterIframeParams(), []);
-    const { data: sessionData, error, isLoading, reload } = useSession(mainToken ?? null);
+    const {
+        data: sessionData,
+        setData: setSessionData,
+        error,
+        isLoading,
+        reload,
+    } = useSession(mainToken ?? null);
+    const [activeTab, setActiveTab] = useState<SessionTab>("session");
 
     // Subscribe only once the REST call has created the lock configuration:
     // opening the socket before that would race the session lookup.
@@ -31,10 +49,14 @@ export default function Session() {
 
     const hasPassword = Boolean(session?.lock_password && session.role === "keyholder");
 
+    const handleConfigSaved = (config: ChasterExtensionConfigSchema) => {
+        setSessionData((current) => (current ? { ...current, config } : current));
+    };
+
     return (
         <PageShell>
             <PageHeader
-                subtitle="Link Puryfi to this lock and review the settings in effect."
+                subtitle="Link Puryfi to this lock and manage its settings."
                 version={import.meta.env.VITE_APP_VERSION}
             >
                 {session ? (
@@ -71,19 +93,47 @@ export default function Session() {
                 <SessionSkeleton />
             ) : session ? (
                 <>
-                    <div className={cn("grid gap-5", hasPassword && "lg:grid-cols-2")}>
-                        <PuryfiConnection session={session} liveStatus={realtimeStatus} />
+                    <Tabs
+                        items={TABS}
+                        value={activeTab}
+                        onChange={(value) => {
+                            if (value === "session" || value === "settings") {
+                                setActiveTab(value);
+                            }
+                        }}
+                        ariaLabel="Extension sections"
+                    />
 
-                        {hasPassword && session.lock_password ? (
-                            <ShowPuryfiPassword puryfiPassword={session.lock_password} />
-                        ) : null}
-                    </div>
+                    {activeTab === "session" ? (
+                        <div role="tabpanel" aria-label="Session" className="flex flex-col gap-5">
+                            <div className={cn("grid gap-5", hasPassword && "lg:grid-cols-2")}>
+                                <PuryfiConnection session={session} liveStatus={realtimeStatus} />
 
-                    {session.automation_mode && mainToken ? (
-                        <SessionAutomationsSummary mainToken={mainToken} />
-                    ) : (
-                        <SessionSettings session={session} />
-                    )}
+                                {hasPassword && session.lock_password ? (
+                                    <ShowPuryfiPassword puryfiPassword={session.lock_password} />
+                                ) : null}
+                            </div>
+
+                            {session.automation_mode && mainToken ? (
+                                <SessionAutomationsSummary mainToken={mainToken} />
+                            ) : null}
+                        </div>
+                    ) : null}
+
+                    {mainToken ? (
+                        <div
+                            role="tabpanel"
+                            aria-label="Settings"
+                            hidden={activeTab !== "settings"}
+                        >
+                            <SessionSettings
+                                key={JSON.stringify(session.config)}
+                                session={session}
+                                mainToken={mainToken}
+                                onSaved={handleConfigSaved}
+                            />
+                        </div>
+                    ) : null}
                 </>
             ) : (
                 <EmptySession />

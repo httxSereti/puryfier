@@ -47,6 +47,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/session/{main_token}/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Session Configuration Endpoint
+         * @description Update the settings of the current session from the main page.
+         */
+        put: operations["update_session_configuration_endpoint_api_session__main_token__configuration_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/session/{main_token}/link-token": {
         parameters: {
             query?: never;
@@ -760,6 +780,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChasterExtensionSessionSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_session_configuration_endpoint_api_session__main_token__configuration_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                main_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChasterExtensionConfigSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

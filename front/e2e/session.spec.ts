@@ -19,7 +19,7 @@ test.describe("session page", () => {
         await page.goto(extensionUrl({ mainToken: MAIN_TOKEN }));
 
         await expect(page.getByText("Puryfi is not linked")).toBeVisible();
-        await expect(page.getByText("wearer")).toBeVisible();
+        await expect(page.getByText("wearer", { exact: true })).toBeVisible();
 
         await page.getByRole("button", { name: "Generate WebSocket URL" }).click();
 
@@ -69,6 +69,50 @@ test.describe("session page", () => {
 
         await expect(page.getByText("Puryfi is offline")).toBeVisible();
         await expect(page.getByRole("button", { name: "View WebSocket URL" })).toBeVisible();
+    });
+
+    test("lets a keyholder edit the session settings", async ({ page }) => {
+        await mockRealtime(page);
+        let saved: unknown = null;
+        await mockSessionApi(
+            page,
+            makeSession({ role: "keyholder" }),
+            undefined,
+            (payload) => {
+                saved = payload;
+            },
+        );
+
+        await page.goto(extensionUrl({ mainToken: MAIN_TOKEN }));
+
+        await page.getByRole("tab", { name: "Settings" }).click();
+
+        const toggle = page.getByRole("switch", { name: "Lock on freeze" });
+        await expect(toggle).toBeChecked();
+
+        await toggle.click();
+
+        await expect(page.getByText("Unsaved changes")).toBeVisible();
+        await page.getByRole("button", { name: "Save settings" }).click();
+
+        await expect(page.getByText("Up to date")).toBeVisible();
+        await expect.poll(() => saved).toMatchObject({ lock_on_freeze: false });
+    });
+
+    test("keeps the settings read-only for a wearer in a shared lock", async ({ page }) => {
+        await mockRealtime(page);
+        await mockSessionApi(page, makeSession({ role: "wearer", is_self_lock: false }));
+
+        await page.goto(extensionUrl({ mainToken: MAIN_TOKEN }));
+
+        await page.getByRole("tab", { name: "Settings" }).click();
+
+        await expect(
+            page.getByRole("switch", { name: "Lock on freeze" }),
+        ).toBeDisabled();
+        await expect(
+            page.getByRole("button", { name: "Save settings" }),
+        ).toHaveCount(0);
     });
 
     test("explains how to open the extension without a token", async ({ page }) => {

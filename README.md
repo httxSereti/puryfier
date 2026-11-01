@@ -251,6 +251,9 @@ The extension configuration page exposes an **Automations** editor:
 Legacy switches (`lock_on_freeze`, `unlock_on_unfreeze`, `censorPicsConfig`) remain available until the
 lock is converted with **Convert to automations**.
 
+The extension main page has a **Settings** tab as well. Keyholders (and wearers of self-locks) can
+update the legacy settings there; changes are saved to the running session immediately.
+
 See [`docs/AUTOMATIONS.md`](docs/AUTOMATIONS.md) for the rule schema, API, permissions and execution details.
 
 ### Common

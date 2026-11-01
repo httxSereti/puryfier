@@ -315,6 +315,23 @@ async def update_configuration(
     return session_id if isinstance(session_id, str) and session_id else None
 
 
+async def update_session_configuration(
+    session_id: str, config: "ChasterExtensionConfigSchema"
+) -> None:
+    """Persist a running session's configuration in Chaster.
+
+    Used by the extension main page, which only receives a main page token and
+    therefore has no configuration token to call the configuration endpoint.
+    """
+    response = await request_chaster(
+        "PATCH",
+        f"/api/extensions/sessions/{session_id}",
+        json={"config": config.model_dump()},
+    )
+    response.raise_for_status()
+    log.info("configuration.session_updated", session_id=session_id)
+
+
 def parse_session_auth(data: dict) -> ChasterSessionAuth:
     raw_session = data.get("session")
     session: dict[str, Any] = raw_session if isinstance(raw_session, dict) else {}
@@ -360,6 +377,13 @@ class ChasterService:
         config: "ChasterExtensionConfigSchema",
     ) -> str | None:
         return await update_configuration(configuration_token, config)
+
+    async def update_session_configuration(
+        self,
+        session_id: str,
+        config: "ChasterExtensionConfigSchema",
+    ) -> None:
+        await update_session_configuration(session_id, config)
 
     async def add_time(self, session_id: str, duration: int) -> bool:
         return await add_time_to_lock(session_id, duration)

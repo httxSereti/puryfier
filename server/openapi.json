@@ -73,6 +73,57 @@
         }
       }
     },
+    "/api/session/{main_token}/configuration": {
+      "put": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Update Session Configuration Endpoint",
+        "description": "Update the settings of the current session from the main page.",
+        "operationId": "update_session_configuration_endpoint_api_session__main_token__configuration_put",
+        "parameters": [
+          {
+            "name": "main_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Main Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChasterExtensionConfigSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/session/{main_token}/link-token": {
       "post": {
         "tags": [

@@ -1,4 +1,7 @@
-import type { ChasterExtensionSessionSchema } from "@/types/api";
+import type {
+    ChasterExtensionConfigSchema,
+    ChasterExtensionSessionSchema,
+} from "@/types/api";
 
 import { apiClient } from "./client";
 
@@ -12,6 +15,19 @@ export async function fetchSession(
         { signal },
     );
     return data;
+}
+
+/** Persist the settings of the current Chaster session from the main page. */
+export async function updateSessionConfiguration(
+    mainToken: string,
+    config: ChasterExtensionConfigSchema,
+    signal?: AbortSignal,
+): Promise<void> {
+    await apiClient.put(
+        `/api/session/${encodeURIComponent(mainToken)}/configuration`,
+        config,
+        { signal },
+    );
 }
 
 /** Generate (or reuse) the wearer's Puryfi WebSocket link token. */

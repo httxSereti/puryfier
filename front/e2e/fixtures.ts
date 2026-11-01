@@ -108,9 +108,16 @@ export async function mockSessionApi(
     page: Page,
     session: E2ESession,
     onLinkToken?: () => E2ESession,
+    onUpdate?: (payload: unknown) => void,
 ): Promise<void> {
     await page.route("**/api/session/**", async (route) => {
         const request = route.request();
+
+        if (request.method() === "PUT" && request.url().endsWith("/configuration")) {
+            onUpdate?.(request.postDataJSON());
+            await route.fulfill({ status: 204, body: "" });
+            return;
+        }
 
         if (request.method() === "POST" && request.url().endsWith("/link-token")) {
             await route.fulfill({ json: onLinkToken ? onLinkToken() : session });

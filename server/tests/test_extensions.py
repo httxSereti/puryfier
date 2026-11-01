@@ -4,6 +4,7 @@ Regression tests for REVIEW.md critical #2: the emergency lock password was
 silently dropped by the session response schema and never reached the UI.
 """
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -23,6 +24,15 @@ def make_chaster_response(role: str, session_id: str, lock_id: str = "lock-1") -
             "config": {},
         },
     }
+
+
+def make_self_lock_response(
+    role: str, session_id: str, lock_id: str = "lock-1"
+) -> dict:
+    """Session auth payload for a self-lock: the user is both wearer and owner."""
+    response = make_chaster_response(role=role, session_id=session_id, lock_id=lock_id)
+    response["session"]["lock"].pop("keyholder")
+    return response
 
 
 def make_configuration_response(
@@ -222,6 +232,39 @@ class TestConfigurationCreation:
         assert stored["config"]["lock_on_freeze"] is True
 
 
+class TestFetchSessionSelfLockFlag:
+    SESSION_ID = "session-1"
+
+    def test_self_lock_flag_comes_from_chaster_session_auth(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        # The local row may have been created by the configuration page first,
+        # so its stored ids can be missing. Chaster's auth payload is the source
+        # of truth for this response.
+        seed_lock_configuration(session_id=self.SESSION_ID)
+        mock_chaster_api(
+            make_self_lock_response(role="wearer", session_id=self.SESSION_ID)
+        )
+
+        response = client.get("/api/session/main-token")
+
+        assert response.status_code == 200
+        assert response.json()["is_self_lock"] is True
+
+    def test_shared_lock_is_not_reported_as_a_self_lock(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        seed_lock_configuration(session_id=self.SESSION_ID)
+        mock_chaster_api(
+            make_chaster_response(role="wearer", session_id=self.SESSION_ID)
+        )
+
+        response = client.get("/api/session/main-token")
+
+        assert response.status_code == 200
+        assert response.json()["is_self_lock"] is False
+
+
 class TestFetchSessionLinkToken:
     """REVIEW.md #8: only the wearer may see the link token — whoever holds
     it owns the Puryfi connection slot."""
@@ -342,6 +385,175 @@ class TestCreateLinkToken:
         response = client.post("/api/session/bad-token/link-token")
 
         assert response.status_code == 401
+
+
+UPDATE_SESSION_PAYLOAD = {
+    "lock_on_freeze": False,
+    "unlock_on_unfreeze": False,
+    "censorPicsConfig": {
+        "enabled": True,
+        "limit_count": 5,
+        "added_duration": 120,
+    },
+}
+
+
+class TestUpdateSessionConfiguration:
+    """The main page can edit the session settings when the role allows it."""
+
+    SESSION_ID = "session-1"
+
+    def _seed(self, seed_lock_configuration, **overrides):
+        fields = {"keyholder_id": "keyholder-1", "wearer_id": "wearer-1"}
+        fields.update(overrides)
+        return seed_lock_configuration(
+            session_id=self.SESSION_ID,
+            **fields,
+        )
+
+    def test_keyholder_can_update_the_session_configuration(
+        self, client, seed_lock_configuration, mongo_db, mock_chaster_api
+    ):
+        self._seed(seed_lock_configuration)
+        calls = mock_chaster_api(
+            make_chaster_response(role="keyholder", session_id=self.SESSION_ID)
+        )
+
+        response = client.put(
+            "/api/session/main-token/configuration", json=UPDATE_SESSION_PAYLOAD
+        )
+
+        assert response.status_code == 200
+        methods = [(call.method, call.url.path) for call in calls]
+        assert methods[-1] == (
+            "PATCH",
+            f"/api/extensions/sessions/{self.SESSION_ID}",
+        )
+        sent = json.loads(calls[-1].content)
+        assert sent["config"]["lock_on_freeze"] is False
+        assert sent["config"]["censorPicsConfig"]["limit_count"] == 5
+
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        assert stored["config"]["lock_on_freeze"] is False
+        assert stored["config"]["censorPicsConfig"]["limit_count"] == 5
+
+    def test_wearer_cannot_update_a_shared_lock(
+        self, client, seed_lock_configuration, mongo_db, mock_chaster_api
+    ):
+        self._seed(seed_lock_configuration)
+        calls = mock_chaster_api(
+            make_chaster_response(role="wearer", session_id=self.SESSION_ID)
+        )
+
+        response = client.put(
+            "/api/session/main-token/configuration", json=UPDATE_SESSION_PAYLOAD
+        )
+
+        assert response.status_code == 403
+        assert len(calls) == 1  # session auth only, no Chaster update
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        assert stored["config"]["lock_on_freeze"] is True
+
+    @pytest.mark.parametrize("role", ["wearer", "keyholder"])
+    def test_self_lock_can_update_the_session_configuration(
+        self, client, seed_lock_configuration, mongo_db, mock_chaster_api, role
+    ):
+        self._seed(
+            seed_lock_configuration,
+            keyholder_id=None,
+            wearer_id="wearer-1",
+        )
+        calls = mock_chaster_api(
+            make_self_lock_response(role=role, session_id=self.SESSION_ID)
+        )
+
+        response = client.put(
+            "/api/session/main-token/configuration", json=UPDATE_SESSION_PAYLOAD
+        )
+
+        assert response.status_code == 200
+        assert calls[-1].method == "PATCH"
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        assert stored["config"]["lock_on_freeze"] is False
+
+    def test_unknown_role_is_forbidden(
+        self, client, seed_lock_configuration, mock_chaster_api
+    ):
+        self._seed(seed_lock_configuration)
+        calls = mock_chaster_api(
+            make_chaster_response(role="spectator", session_id=self.SESSION_ID)
+        )
+
+        response = client.put(
+            "/api/session/main-token/configuration", json=UPDATE_SESSION_PAYLOAD
+        )
+
+        assert response.status_code == 403
+        assert len(calls) == 1
+
+    def test_server_owned_fields_cannot_be_overwritten(
+        self, client, seed_lock_configuration, mongo_db, mock_chaster_api
+    ):
+        self._seed(
+            seed_lock_configuration,
+            config={
+                "lock_on_freeze": True,
+                "unlock_on_unfreeze": True,
+                "censorPicsConfig": {
+                    "limit_count": 100,
+                    "added_duration": 600,
+                    "enabled": False,
+                },
+                "automation_permissions": {"wearer_can_manage": False},
+                "automations_snapshot": [{"id": "rule-1"}],
+                "automations_snapshot_version": 4,
+                "automations_snapshot_hash": "hash",
+            },
+        )
+        mock_chaster_api(
+            make_self_lock_response(role="wearer", session_id=self.SESSION_ID)
+        )
+
+        response = client.put(
+            "/api/session/main-token/configuration",
+            json={
+                **UPDATE_SESSION_PAYLOAD,
+                "automation_permissions": {"wearer_can_manage": True},
+                "automations_snapshot": [],
+                "automations_snapshot_version": 0,
+                "automations_snapshot_hash": None,
+            },
+        )
+
+        assert response.status_code == 200
+        stored = mongo_db["users_lock_configurations"].find_one(
+            {"session_id": self.SESSION_ID}
+        )
+        assert stored["config"]["automation_permissions"]["wearer_can_manage"] is False
+        assert stored["config"]["automations_snapshot"] == [{"id": "rule-1"}]
+        assert stored["config"]["automations_snapshot_version"] == 4
+        assert stored["config"]["automations_snapshot_hash"] == "hash"
+
+    def test_missing_local_session_returns_404(
+        self, client, mock_chaster_api
+    ):
+        mock_chaster_api(
+            make_chaster_response(
+                role="keyholder", session_id="unknown-session"
+            )
+        )
+
+        response = client.put(
+            "/api/session/main-token/configuration", json=UPDATE_SESSION_PAYLOAD
+        )
+
+        assert response.status_code == 404
 
 
 class TestTokenRedactionInErrors:

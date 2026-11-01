@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Session from "@/pages/Session";
 import { usePuryfiRealtimeStatus } from "@/hooks/usePuryfiRealtimeStatus";
-import { fetchSession } from "@/lib/http/session";
+import { fetchSession, updateSessionConfiguration } from "@/lib/http/session";
 import { clearLocationHash, makeSession, setChasterHash } from "@/test/fixtures";
 
 vi.mock("@/lib/http/session", () => ({
     fetchSession: vi.fn(),
     createLinkToken: vi.fn(),
+    updateSessionConfiguration: vi.fn(),
 }));
 
 vi.mock("@/hooks/usePuryfiRealtimeStatus", () => ({
@@ -17,11 +18,14 @@ vi.mock("@/hooks/usePuryfiRealtimeStatus", () => ({
 }));
 
 const fetchSessionMock = vi.mocked(fetchSession);
+const updateSessionConfigurationMock = vi.mocked(updateSessionConfiguration);
 const realtimeStatusMock = vi.mocked(usePuryfiRealtimeStatus);
 
 beforeEach(() => {
     clearLocationHash();
     fetchSessionMock.mockReset();
+    updateSessionConfigurationMock.mockReset();
+    updateSessionConfigurationMock.mockResolvedValue(undefined);
     realtimeStatusMock.mockReset();
     realtimeStatusMock.mockReturnValue(null);
 });
@@ -134,5 +138,65 @@ describe("Session page", () => {
 
         await waitFor(() => expect(screen.getByText("Puryfi is not linked")).toBeInTheDocument());
         expect(fetchSessionMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("lets a keyholder edit and save the session settings", async () => {
+        setChasterHash({ mainToken: "main-token" });
+        fetchSessionMock.mockResolvedValue(makeSession({ role: "keyholder" }));
+        const user = userEvent.setup();
+
+        render(<Session />);
+
+        await user.click(await screen.findByRole("tab", { name: "Settings" }));
+
+        const toggle = screen.getByRole("switch", { name: "Lock on freeze" });
+        expect(toggle).toBeChecked();
+
+        const save = screen.getByRole("button", { name: "Save settings" });
+        expect(save).toBeDisabled();
+
+        await user.click(toggle);
+
+        expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+        expect(save).toBeEnabled();
+
+        await user.click(save);
+
+        await waitFor(() =>
+            expect(updateSessionConfigurationMock).toHaveBeenCalledWith(
+                "main-token",
+                expect.objectContaining({ lock_on_freeze: false }),
+            ),
+        );
+        expect(await screen.findByText("Up to date")).toBeInTheDocument();
+    });
+
+    it("lets a self-lock wearer edit the session settings", async () => {
+        setChasterHash({ mainToken: "main-token" });
+        fetchSessionMock.mockResolvedValue(makeSession({ is_self_lock: true }));
+        const user = userEvent.setup();
+
+        render(<Session />);
+
+        await user.click(await screen.findByRole("tab", { name: "Settings" }));
+
+        expect(screen.getByRole("switch", { name: "Lock on freeze" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Save settings" })).toBeInTheDocument();
+    });
+
+    it("keeps the settings read-only for a wearer in a shared lock", async () => {
+        setChasterHash({ mainToken: "main-token" });
+        fetchSessionMock.mockResolvedValue(makeSession({ role: "wearer", is_self_lock: false }));
+        const user = userEvent.setup();
+
+        render(<Session />);
+
+        await user.click(await screen.findByRole("tab", { name: "Settings" }));
+
+        expect(screen.getByRole("switch", { name: "Lock on freeze" })).toBeDisabled();
+        expect(screen.getByText(/Only the keyholder can change these settings/)).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Save settings" }),
+        ).not.toBeInTheDocument();
     });
 });
