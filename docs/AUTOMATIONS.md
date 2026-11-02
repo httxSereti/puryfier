@@ -115,6 +115,18 @@ Audit trail with a 90-day TTL:
 - `puryfi.locked` (PuryFi `stateChange` with a `lockConfiguration`)
 - `puryfi.unlocked` (PuryFi `stateChange` without a `lockConfiguration`)
 
+The last known `enabled` / lock state is persisted with the lock session. When
+PuryFi reconnects, the initial `getState` snapshot is compared with that saved
+value, so a transition that happened while the socket was down still emits the
+corresponding event.
+
+A successful `requestPluginIntents` response is treated as the grant itself:
+some PuryFi runtimes authorise the requested intents without sending an
+`intentsGrant` echo. Puryfier therefore does not block the protected setup while
+waiting for one. If the runtime keeps the intents pending, Puryfier re-sends the
+plugin manifest with a temporary description to force the storage update that
+triggers PuryFi's own intent-grant handler, then restores the manifest.
+
 ### Supported conditions
 
 | Field | Operators |

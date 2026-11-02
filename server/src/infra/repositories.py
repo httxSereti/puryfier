@@ -44,6 +44,8 @@ def _to_entity(document: dict[str, Any] | UserLockConfiguration) -> LockSession:
         wearer_id=raw.get("wearer_id"),
         puryfi_username=raw.get("puryfi_username"),
         puryfi_support_tier=support_tier,
+        puryfi_enabled=raw.get("puryfi_enabled"),
+        puryfi_has_lock=raw.get("puryfi_has_lock"),
         seen_censored_objects=int(raw.get("seen_censored_objects", 0) or 0),
         lock_password=raw.get("lock_password"),
         automation_mode=bool(raw.get("automation_mode", False)),

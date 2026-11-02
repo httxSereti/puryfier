@@ -117,8 +117,55 @@ const ACTION_LABELS: Record<string, string> = {
     "chaster.log": "write a Chaster log",
 };
 
+const EVENT_NAMES: Record<string, string> = {
+    "chaster.session.joined": "Session joined",
+    "chaster.session.left": "Session left",
+    "chaster.lock.frozen": "Lock frozen",
+    "chaster.lock.unfrozen": "Lock unfrozen",
+    "puryfi.media.scan": "Media scanned",
+    "puryfi.connection.ready": "Connection ready",
+    "puryfi.connection.disconnected": "Connection lost",
+    "puryfi.enabled": "Enabled",
+    "puryfi.disabled": "Disabled",
+    "puryfi.locked": "Locked",
+    "puryfi.unlocked": "Unlocked",
+};
+
+const ACTION_NAMES: Record<string, string> = {
+    "puryfi.lock": "Lock PuryFi",
+    "puryfi.enable": "Enable PuryFi",
+    "puryfi.unlock": "Unlock PuryFi",
+    "puryfi.disable": "Disable PuryFi",
+    "puryfi.set_lock": "Update PuryFi lock",
+    "puryfi.enter_emergency_token": "Use emergency token",
+    "chaster.add_time": "Add time",
+    "chaster.remove_time": "Remove time",
+    "chaster.freeze": "Freeze lock",
+    "chaster.unfreeze": "Unfreeze lock",
+    "chaster.toggle_freeze": "Toggle freeze",
+    "chaster.pillory": "Pillory",
+    "chaster.set_timer_visibility": "Timer visibility",
+    "chaster.log": "Write log",
+};
+
+export type AutomationSource = "puryfi" | "chaster";
+
+export function automationSource(value: string): AutomationSource | null {
+    if (value.startsWith("puryfi.")) return "puryfi";
+    if (value.startsWith("chaster.")) return "chaster";
+    return null;
+}
+
 export function eventLabel(event: string): string {
     return EVENT_LABELS[event] ?? event;
+}
+
+export function eventName(event: string): string {
+    return EVENT_NAMES[event] ?? eventLabel(event);
+}
+
+export function actionName(type: string): string {
+    return ACTION_NAMES[type] ?? type;
 }
 
 export function conditionLabel(

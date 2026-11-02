@@ -540,6 +540,8 @@ class TestRealtimeStatus:
                     "puryfi_version": "0.8.7.1",
                     "puryfi_username": PROFILE_USERNAME,
                     "puryfi_support_tier": PROFILE_SUPPORT_TIER,
+                    "puryfi_enabled": True,
+                    "puryfi_has_lock": True,
                 }
 
                 stored = mongo_db["users_lock_configurations"].find_one(

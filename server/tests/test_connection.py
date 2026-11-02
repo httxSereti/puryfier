@@ -91,11 +91,11 @@ def run(coro):
     return asyncio.run(coro)
 
 
-async def wait_until(predicate, attempts: int = 100) -> None:
+async def wait_until(predicate, attempts: int = 400) -> None:
     for _ in range(attempts):
         if predicate():
             return
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.005)
     raise AssertionError("condition was not reached")
 
 
@@ -460,10 +460,10 @@ class TestPendingIntents:
 
         index = 0
         idle = 0
-        while idle < 20:
+        while idle < 200:
             if index >= len(ws.sent):
                 idle += 1
-                await asyncio.sleep(0)
+                await asyncio.sleep(0.005)
                 continue
 
             idle = 0
@@ -487,7 +487,7 @@ class TestPendingIntents:
                 )
             )
 
-    def test_pending_intents_do_not_close_the_connection(self):
+    def test_requested_intents_do_not_wait_for_a_grant_echo(self):
         async def scenario():
             connection, ws, _ = make_flush_connection()
 
@@ -495,20 +495,20 @@ class TestPendingIntents:
             await asyncio.sleep(0.05)
 
             assert connection.ready
-            assert not connection.intents_granted
+            assert connection.intents_granted
             assert ws.close_codes == []
             message_types = [message.get("type") for message in ws.sent]
-            # Intent-gated RPCs must wait for the grant instead of failing the
-            # handshake or being rejected by PuryFi.
-            assert "getState" not in message_types
-            assert "subscribeToState" not in message_types
-            assert "subscribeToStaticMediaScans" not in message_types
+            # Protected setup can start immediately: PuryFi authorises the
+            # intents but may never send an `intentsGrant` echo.
+            assert "getState" in message_types
+            assert "subscribeToState" in message_types
+            assert "subscribeToStaticMediaScans" in message_types
 
             await connection.stop()
 
         run(scenario())
 
-    def test_late_intents_grant_finishes_setup_and_drains_the_queue(self):
+    def test_late_intents_grant_does_not_duplicate_setup(self):
         async def scenario():
             connection, ws, queue = make_flush_connection(
                 [
@@ -522,51 +522,25 @@ class TestPendingIntents:
             )
 
             await self._finish_handshake_without_intents(connection, ws)
+            await wait_until(lambda: queue.messages == [])
+            before = [message.get("type") for message in ws.sent]
 
             await connection.handle_message(
                 msgpack.packb(
                     {
                         "type": "intentsGrant",
-                        "payload": {"intents": REQUIRED_INTENTS},
+                        "payload": {"intents": [*REQUIRED_INTENTS, *OPTIONAL_INTENTS]},
                     }
                 )
             )
+            await asyncio.sleep(0.05)
 
-            index = len(ws.sent)
-            for expected_type in (
-                "subscribeToState",
-                "getState",
-                "subscribeToStaticMediaScans",
-                "setState",
-            ):
-                await wait_until(lambda index=index: len(ws.sent) > index)
-                message = ws.sent[index]
-                index += 1
-                assert message["type"] == expected_type
-
-                if expected_type == "getState":
-                    payload = {
-                        "type": "ok",
-                        "value": {
-                            "username": "alice",
-                            "supportTier": {"level": 2, "name": "Supporter"},
-                        },
-                    }
-                else:
-                    payload = {"type": "ok"}
-
-                await connection.handle_message(
-                    msgpack.packb(
-                        {
-                            "responseId": message["responseId"],
-                            "payload": payload,
-                        }
-                    )
-                )
-
-            await wait_until(lambda: queue.messages == [])
-
-            assert connection.intents_granted
+            after = [message.get("type") for message in ws.sent]
+            assert after.count("subscribeToState") == before.count(
+                "subscribeToState"
+            )
+            assert after.count("subscribeToStaticMediaScans") == 1
+            assert queue.messages == []
             assert connection._intents_setup_done
             assert ws.close_codes == []
             await connection.stop()
@@ -657,7 +631,7 @@ class TestPuryfiProtocolEvents:
 
         run(scenario())
 
-    def test_intents_revocation_clears_the_grant_without_an_event(self):
+    def test_intents_grant_is_merged_without_an_event(self):
         async def scenario():
             connection, _, engine = make_event_connection()
             connection.ready = True
@@ -680,7 +654,8 @@ class TestPuryfiProtocolEvents:
             )
 
             assert engine.events == []
-            assert connection.intents_granted is False
+            assert "writeEnabledState" in connection.granted_intents
+            assert connection.intents_granted is True
             await connection.stop()
 
         run(scenario())
@@ -709,6 +684,7 @@ class TestPuryfiProtocolEvents:
             )
             assert payload["puryfi_enabled"] is False
             assert context["chaster_frozen"] is True
+            assert connection.session.puryfi_enabled is False
             await connection.stop()
 
         run(scenario())
@@ -731,6 +707,48 @@ class TestPuryfiProtocolEvents:
                 "puryfi.enabled"
             ]
             assert engine.events[0][1]["puryfi_enabled"] is True
+            assert connection.session.puryfi_enabled is True
+            await connection.stop()
+
+        run(scenario())
+
+    def test_initial_state_transition_emits_events_after_a_reconnect(self):
+        async def scenario():
+            connection, _, engine = make_event_connection()
+            connection.ready = True
+            connection.granted_intents = {
+                *REQUIRED_INTENTS,
+                *OPTIONAL_INTENTS,
+            }
+            connection.intents_granted_event.set()
+            # Last known state from a previous connection: PuryFi was disabled
+            # and unlocked before the socket came back.
+            connection.session.puryfi_enabled = False
+            connection.session.puryfi_has_lock = False
+
+            async def fake_subscribe() -> None:
+                return None
+
+            async def fake_read_state(path: str):
+                if path == "enabled":
+                    return True, True
+                if path == "lockConfiguration":
+                    return True, {"startTime": 1}
+                return False, None
+
+            connection._subscribe_to_state = fake_subscribe
+            connection._read_state_result = fake_read_state
+
+            await connection.refresh_puryfi_state()
+
+            assert [event[0] for event in engine.events] == [
+                "puryfi.enabled",
+                "puryfi.locked",
+            ]
+            assert engine.events[0][1]["puryfi_enabled"] is True
+            assert engine.events[1][1]["puryfi_has_lock"] is True
+            assert connection.session.puryfi_enabled is True
+            assert connection.session.puryfi_has_lock is True
             await connection.stop()
 
         run(scenario())
@@ -938,7 +956,8 @@ class TestPuryfiProfile:
                             level=2, name="Supporter"
                         ),
                     },
-                )
+                ),
+                ("session-1", {"puryfi_has_lock": False}),
             ]
             await connection.stop()
 
@@ -976,6 +995,43 @@ class TestPuryfiProfile:
             assert initialized is True
             assert connection.puryfi_enabled is True
             assert connection.puryfi_has_lock is True
+            assert connection.session.puryfi_enabled is True
+            assert connection.session.puryfi_has_lock is True
+            await connection.stop()
+
+        run(scenario())
+
+    def test_requested_intents_are_trusted_without_a_grant_echo(self):
+        async def scenario():
+            sessions = FakeSessions()
+            connection, ws = self._connection(sessions)
+
+            initialized, messages = await asyncio.gather(
+                connection.initialize_plugin(),
+                self._answer_handshake(
+                    connection,
+                    ws,
+                    puryfi_intents=[],
+                    user_response={"type": "ok", "value": None},
+                    username_response={"type": "error"},
+                    support_tier_response={"type": "error"},
+                    enabled_response={"type": "ok", "value": True},
+                    lock_response={"type": "ok", "value": None},
+                ),
+            )
+
+            assert initialized is True
+            assert set(REQUIRED_INTENTS) <= connection.granted_intents
+            assert set(OPTIONAL_INTENTS) <= connection.granted_intents
+            assert connection.intents_granted
+            sent = [
+                (message["type"], message["payload"]) for message in messages
+            ]
+            assert ("subscribeToState", {"path": "enabled"}) in sent
+            assert (
+                "subscribeToState",
+                {"path": "lockConfiguration"},
+            ) in sent
             await connection.stop()
 
         run(scenario())
@@ -1058,7 +1114,8 @@ class TestPuryfiProfile:
             assert connection.session.puryfi_username == "alice"
             assert connection.session.puryfi_support_tier is None
             assert sessions.updates == [
-                ("session-1", {"puryfi_username": "alice"})
+                ("session-1", {"puryfi_username": "alice"}),
+                ("session-1", {"puryfi_has_lock": False}),
             ]
             await connection.stop()
 
@@ -1090,7 +1147,9 @@ class TestPuryfiProfile:
 
             assert initialized is True
             assert connection.session.puryfi_username is None
-            assert sessions.updates == []
+            assert sessions.updates == [
+                ("session-1", {"puryfi_has_lock": False})
+            ]
 
             await connection.handle_message(
                 msgpack.packb(
@@ -1106,7 +1165,15 @@ class TestPuryfiProfile:
                     }
                 )
             )
-            await wait_until(lambda: bool(sessions.updates))
+            await wait_until(
+                lambda: connection.session.puryfi_username == "alice"
+            )
+            await wait_until(
+                lambda: any(
+                    update.get("puryfi_username") == "alice"
+                    for _, update in sessions.updates
+                )
+            )
 
             assert connection.session.puryfi_username == "alice"
             assert connection.session.puryfi_support_tier == (

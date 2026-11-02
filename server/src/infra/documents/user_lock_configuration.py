@@ -31,6 +31,12 @@ class UserLockConfiguration(Document):
     puryfi_username: str | None = None
     puryfi_support_tier: PuryfiSupportTierSchema | None = None
 
+    # Last PuryFi enabled/lock state reported by the plugin. Persisted so a
+    # reconnect can detect a transition that happened while the socket was
+    # down (for example when PuryFi was enabled while the server was offline).
+    puryfi_enabled: bool | None = None
+    puryfi_has_lock: bool | None = None
+
     # Number of censored media scans since the last successful time penalty.
     # Persisted so reconnects/restarts do not lose progress.
     seen_censored_objects: int = 0

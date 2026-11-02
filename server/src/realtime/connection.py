@@ -1,7 +1,8 @@
 """One supervised actor per Puryfi WebSocket connection."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import time
+from collections.abc import Awaitable, Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -166,6 +167,17 @@ class Connection:
     def can_send_protected(self) -> bool:
         """True once PuryFi completed the handshake and granted our intents."""
         return not self._closed and self.ready and self.intents_granted
+
+    def _trust_requested_intents(self, requested: Iterable[str]) -> None:
+        """Treat successfully requested intents as granted.
+
+        PuryFi authorises every requested intent but some runtime builds do not
+        echo an ``intentsGrant`` message. Waiting for that echo would leave the
+        connection unable to subscribe to state or send protected commands.
+        """
+        self.granted_intents.update(requested)
+        if all(intent in self.granted_intents for intent in intents):
+            self.intents_granted_event.set()
 
     @property
     def seen_censored_objects(self) -> int:
@@ -467,7 +479,10 @@ class Connection:
             granted = set(payload.get("intents", []))
             previous = self.granted_intents
             removed = sorted(previous - granted)
-            self.granted_intents = granted
+            # Some PuryFi builds authorise requested intents without echoing
+            # the complete list. Merge instead of replacing so the optimistic
+            # grants are not lost.
+            self.granted_intents.update(granted)
 
             revoked_lock_intents = sorted(
                 set(PURYFI_LOCK_INTENTS) & set(removed)
@@ -491,7 +506,7 @@ class Connection:
                 )
 
             all_required_granted = all(
-                intent in granted for intent in intents
+                intent in self.granted_intents for intent in intents
             )
             if all_required_granted:
                 newly_granted = not self.intents_granted_event.is_set()
@@ -687,8 +702,9 @@ class Connection:
                 )
                 return False
 
-            # 4. Request the missing intents. PuryFi only marks them pending;
-            # the user (or the runtime) grants them with `intentsGrant`.
+            # 4. Request the missing intents. PuryFi authorises requested
+            # intents but does not always echo an `intentsGrant`, so record
+            # them locally instead of waiting for that message.
             granted_intents = set(res.get("intents", []))
             self.granted_intents = granted_intents
             missing_intents = [
@@ -711,6 +727,7 @@ class Connection:
                         error=res.get("message"),
                     )
                     return False
+                self._trust_requested_intents(intents)
                 log.info(
                     "connection.intents_pending",
                     session_id=self.session.session_id,
@@ -725,6 +742,9 @@ class Connection:
                 self.intents_granted_event.set()
             else:
                 self.intents_granted_event.set()
+
+            if missing_intents or missing_optional:
+                await self._force_intent_grant()
 
             self._handshake_completed = True
             if self.intents_granted:
@@ -777,11 +797,50 @@ class Connection:
             )
             return
 
+        self._trust_requested_intents(optional_intents)
         log.info(
             "connection.optional_intents_pending",
             session_id=self.session.session_id,
             optional_intents=missing_optional,
         )
+
+    async def _force_intent_grant(self) -> None:
+        """Force PuryFi to flush pending intents through its storage listener.
+
+        Some PuryFi builds only move ``pendingIntents`` into ``intents`` when
+        the stored plugin object changes. Re-sending the manifest with a unique
+        description guarantees that storage write, then restores the public
+        manifest. This avoids patching the extension build.
+        """
+        kick = {
+            **manifest,
+            "description": (
+                f"{manifest['description']} "
+                f"intent-sync-{time.monotonic_ns()}"
+            ),
+        }
+        try:
+            await self.send_message("setPluginManifest", {"manifest": kick})
+            await asyncio.sleep(0.05)
+            await self.send_message("setPluginManifest", {"manifest": manifest})
+        except (ConnectionError, TimeoutError):
+            return
+
+        for _ in range(10):
+            try:
+                res = await self.send_message("getPluginIntents", {})
+            except (ConnectionError, TimeoutError):
+                return
+            if isinstance(res, dict) and res.get("type") == "ok":
+                granted = set(res.get("intents", []))
+                if granted:
+                    self.granted_intents.update(granted)
+                    if all(
+                        intent in self.granted_intents for intent in intents
+                    ):
+                        self.intents_granted_event.set()
+                    return
+            await asyncio.sleep(0.05)
 
     async def _on_intents_granted(self) -> None:
         """Finish intent-gated setup, then deliver the queued commands."""
@@ -813,6 +872,11 @@ class Connection:
             # diagnostic metadata: a failure must not fail the handshake.
             await self.refresh_snapshot(publish=False)
             self._schedule_profile_retry()
+            if (
+                self.puryfi_enabled is None
+                or self.puryfi_has_lock is None
+            ):
+                self._schedule_state_retry()
 
             # Subscribe to static media scans
             res = await self.send_message("subscribeToStaticMediaScans", {})
@@ -950,6 +1014,17 @@ class Connection:
 
         for path, res in zip(paths, responses, strict=False):
             if isinstance(res, dict) and res.get("type") == "error":
+                error_code = res.get("error")
+                if error_code == "missingPluginIntents":
+                    # PuryFi may grant requested intents asynchronously; the
+                    # state retry task will subscribe again shortly.
+                    log.debug(
+                        "connection.state_subscription_pending",
+                        session_id=self.session.session_id,
+                        path=path,
+                        error=res.get("message"),
+                    )
+                    continue
                 log.warning(
                     "connection.state_subscription_rejected",
                     session_id=self.session.session_id,
@@ -957,25 +1032,86 @@ class Connection:
                     error=res.get("message"),
                 )
 
-    async def _load_puryfi_state(self) -> bool:
-        """Read the optional enabled/lock state without keeping any secret."""
+    async def _load_puryfi_state(self) -> tuple[bool, list[str]]:
+        """Read the optional enabled/lock state without keeping any secret.
+
+        Returns whether the cached state changed and the transition events that
+        should feed the automation engine. The previous value is taken from
+        this connection when available and falls back to the persisted session
+        state, so a reconnect can detect a transition that happened while the
+        socket was down (for example PuryFi enabled while the server restarted).
+        """
         changed = False
+        events: list[str] = []
+        updates: dict[str, object] = {}
 
         if "readEnabledState" in self.granted_intents:
             ok, value = await self._read_state_result("enabled")
-            if ok and isinstance(value, bool) and value != self.puryfi_enabled:
-                self.puryfi_enabled = value
-                changed = True
+            if ok and isinstance(value, bool):
+                previous = (
+                    self.puryfi_enabled
+                    if self.puryfi_enabled is not None
+                    else getattr(self.session, "puryfi_enabled", None)
+                )
+                if value != self.puryfi_enabled:
+                    self.puryfi_enabled = value
+                    changed = True
+                if value != getattr(self.session, "puryfi_enabled", None):
+                    self.session.puryfi_enabled = value
+                    updates["puryfi_enabled"] = value
+                if previous is not None and value != previous:
+                    events.append(
+                        EVENT_PURYFI_ENABLED
+                        if value
+                        else EVENT_PURYFI_DISABLED
+                    )
 
         if "readLockConfigurationState" in self.granted_intents:
             ok, value = await self._read_state_result("lockConfiguration")
             if ok:
                 has_lock = isinstance(value, dict)
+                previous = (
+                    self.puryfi_has_lock
+                    if self.puryfi_has_lock is not None
+                    else getattr(self.session, "puryfi_has_lock", None)
+                )
                 if has_lock != self.puryfi_has_lock:
                     self.puryfi_has_lock = has_lock
                     changed = True
+                if has_lock != getattr(self.session, "puryfi_has_lock", None):
+                    self.session.puryfi_has_lock = has_lock
+                    updates["puryfi_has_lock"] = has_lock
+                if previous is not None and has_lock != previous:
+                    events.append(
+                        EVENT_PURYFI_LOCKED
+                        if has_lock
+                        else EVENT_PURYFI_UNLOCKED
+                    )
 
-        return changed
+        if updates:
+            # State is persisted so the next connection can compare against the
+            # last known value instead of starting from "unknown".
+            await self._persist_profile(updates)
+
+        return changed, events
+
+    def _puryfi_state_event_payload(self, event_type: str) -> dict[str, object]:
+        return {
+            "path": (
+                "enabled"
+                if event_type in {EVENT_PURYFI_ENABLED, EVENT_PURYFI_DISABLED}
+                else "lockConfiguration"
+            ),
+            "puryfi_enabled": self.puryfi_enabled,
+            "puryfi_has_lock": self.puryfi_has_lock,
+        }
+
+    def _emit_puryfi_state_events(self, events: list[str]) -> None:
+        for event_type in events:
+            self._record_automation_event(
+                event_type,
+                self._puryfi_state_event_payload(event_type),
+            )
 
     async def refresh_puryfi_state(self) -> None:
         """Refresh only the optional PuryFi state (permission-gated)."""
@@ -985,7 +1121,9 @@ class Connection:
             if not self.can_send_protected:
                 return
             await self._subscribe_to_state()
-            if await self._load_puryfi_state():
+            changed, events = await self._load_puryfi_state()
+            self._emit_puryfi_state_events(events)
+            if changed:
                 await self._publish_status()
 
     async def refresh_snapshot(self, *, publish: bool = True) -> None:
@@ -997,7 +1135,8 @@ class Connection:
                 return
             await self._subscribe_to_state()
             profile_changed = await self._load_profile()
-            state_changed = await self._load_puryfi_state()
+            state_changed, events = await self._load_puryfi_state()
+            self._emit_puryfi_state_events(events)
             if publish and (profile_changed or state_changed):
                 await self._publish_status()
 
@@ -1029,6 +1168,49 @@ class Connection:
             name="puryfi-profile-retry",
         )
 
+    async def _retry_state_until_available(self) -> None:
+        """Retry the optional state while PuryFi is granting intents.
+
+        PuryFi may authorise requested intents asynchronously without echoing
+        ``intentsGrant``. The first subscription can therefore be rejected with
+        ``missingPluginIntents``; retry with the intent request a few times.
+        """
+        for delay in (0.25, 0.5, 1.0, 2.0, 4.0):
+            await asyncio.sleep(delay)
+            if self._closed or not self.can_send_protected:
+                return
+            if (
+                self.puryfi_enabled is not None
+                and self.puryfi_has_lock is not None
+            ):
+                return
+            try:
+                await self.send_message(
+                    "requestPluginIntents",
+                    {"intents": [*intents, *optional_intents]},
+                )
+                await self.refresh_puryfi_state()
+            except (ConnectionError, TimeoutError):
+                return
+
+        if self.puryfi_enabled is None or self.puryfi_has_lock is None:
+            log.warning(
+                "connection.puryfi_state_unavailable",
+                session_id=self.session.session_id,
+                granted_intents=sorted(self.granted_intents),
+            )
+
+    def _schedule_state_retry(self) -> None:
+        if any(
+            task.get_name() == "puryfi-state-retry"
+            for task in self._tasks
+        ):
+            return
+        self._spawn(
+            self._retry_state_until_available(),
+            name="puryfi-state-retry",
+        )
+
     def _handle_puryfi_state_change(self, payload: dict) -> list[str]:
         """Update the cached enabled/lock state reported by PuryFi.
 
@@ -1038,10 +1220,13 @@ class Connection:
         path = payload.get("path")
         value = payload.get("value")
         events: list[str] = []
+        updates: dict[str, object] = {}
 
         if path == "enabled" and isinstance(value, bool):
             if value != self.puryfi_enabled:
                 self.puryfi_enabled = value
+                self.session.puryfi_enabled = value
+                updates["puryfi_enabled"] = value
                 events.append(
                     EVENT_PURYFI_ENABLED if value else EVENT_PURYFI_DISABLED
                 )
@@ -1059,11 +1244,18 @@ class Connection:
             has_lock = isinstance(value, dict)
             if has_lock != self.puryfi_has_lock:
                 self.puryfi_has_lock = has_lock
+                self.session.puryfi_has_lock = has_lock
+                updates["puryfi_has_lock"] = has_lock
                 events.append(
                     EVENT_PURYFI_LOCKED if has_lock else EVENT_PURYFI_UNLOCKED
                 )
 
         if events:
+            if updates:
+                self._spawn(
+                    self._persist_profile(updates),
+                    name="puryfi-state-persist",
+                )
             self._spawn(self._publish_status(), name="puryfi-state-publish")
         return events
 

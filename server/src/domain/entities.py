@@ -176,6 +176,11 @@ class LockSession:
     wearer_id: str | None = None
     puryfi_username: str | None = None
     puryfi_support_tier: PuryfiSupportTierSchema | None = None
+    # Last PuryFi enabled/lock state reported by the plugin. Persisted so a
+    # reconnect can still detect an enable/lock transition that happened while
+    # the socket was down or while the server was restarting.
+    puryfi_enabled: bool | None = None
+    puryfi_has_lock: bool | None = None
     seen_censored_objects: int = 0
     lock_password: str | None = None
     automation_mode: bool = False
