@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 
 import AutomationActivity from "@/components/common/automations/AutomationActivity";
+import AutomationCard from "@/components/common/automations/AutomationCard";
 import SectionCard from "@/components/ui/section-card";
 import StatusPill from "@/components/ui/status-pill";
+import { FALLBACK_LABELS } from "@/lib/automations";
 import { fetchSessionAutomations } from "@/lib/http/automations";
 import { getApiErrorMessage } from "@/lib/errors";
 import type { AutomationListSchema } from "@/types/api";
@@ -68,21 +70,15 @@ export default function SessionAutomationsSummary({
             ) : (
                 <div className="flex flex-col gap-4">
                     {active.length > 0 ? (
-                        <ul className="flex flex-col gap-1.5">
+                        <div className="flex flex-col gap-3">
                             {active.map((automation) => (
-                                <li
+                                <AutomationCard
                                     key={automation.id}
-                                    className="rounded-lg border border-white/[0.05] bg-black/10 px-3 py-2.5 text-xs text-slate-300"
-                                >
-                                    <span className="font-medium text-slate-200">
-                                        {automation.name}
-                                    </span>
-                                    <span className="ml-2 text-slate-500">
-                                        {automation.owner_role}
-                                    </span>
-                                </li>
+                                    automation={automation}
+                                    labelNames={FALLBACK_LABELS}
+                                />
                             ))}
-                        </ul>
+                        </div>
                     ) : (
                         <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-4 text-center text-xs text-slate-500">
                             No active automations. Create one from the Automations tab.

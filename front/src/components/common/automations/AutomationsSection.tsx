@@ -343,7 +343,7 @@ export default function AutomationsSection({
                                             </Button>
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col gap-2.5">
+                                        <div className="flex flex-col gap-3">
                                             {visibleAutomations.map((automation) => (
                                                 <AutomationCard
                                                     key={automation.id}
@@ -409,7 +409,7 @@ export default function AutomationsSection({
                             description="Kept for 30 days. Duplicate one into another lock."
                             accent="neutral"
                         >
-                            <div className="flex flex-col gap-2.5">
+                            <div className="flex flex-col gap-3">
                                 {archived.map((automation) => (
                                     <AutomationCard
                                         key={automation.id}
