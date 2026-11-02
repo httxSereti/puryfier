@@ -583,6 +583,63 @@ describe("AutomationsSection", () => {
         expect(screen.getByText("Lock on freeze")).toBeInTheDocument();
     });
 
+    it("preserves match-any label filters and run limits when editing", async () => {
+        const user = userEvent.setup();
+        fetchAutomationsMock.mockResolvedValue(
+            makeList({
+                automations: [
+                    makeAutomation({
+                        trigger: {
+                            ...makeTrigger("puryfi.media.scan"),
+                            conditions: [
+                                {
+                                    field: "labels",
+                                    op: "contains_any",
+                                    value: ["Eye", "Tummy"],
+                                },
+                            ],
+                            min_score: 0.5,
+                        },
+                        actions: [
+                            {
+                                type: "chaster.pillory",
+                                params: { duration: 300 },
+                                on_failure: "stop",
+                            },
+                        ],
+                        limits: { cooldown_seconds: 90, max_per_day: 12 },
+                    }),
+                ],
+            }),
+        );
+        render(<AutomationsSection configurationToken="config-token" />);
+
+        await screen.findByText("Lock on freeze");
+        await user.click(screen.getByRole("button", { name: "Edit" }));
+        await user.click(
+            screen.getByRole("button", { name: "Save automation" }),
+        );
+
+        await waitFor(() => {
+            expect(updateAutomationMock).toHaveBeenCalledWith(
+                "config-token",
+                "auto-1",
+                expect.objectContaining({
+                    trigger: expect.objectContaining({
+                        conditions: [
+                            {
+                                field: "labels",
+                                op: "contains_any",
+                                value: ["Eye", "Tummy"],
+                            },
+                        ],
+                    }),
+                    limits: { cooldown_seconds: 90, max_per_day: 12 },
+                }),
+            );
+        });
+    });
+
     it("returns to my automations after saving a template", async () => {
         const user = userEvent.setup();
         fetchAutomationsMock.mockResolvedValue(makeList({ automations: [] }));
